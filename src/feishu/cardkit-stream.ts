@@ -245,6 +245,7 @@ export class CardKitStream {
     finalText?: string,
     finalStatus: "done" | "stopped" | "failed" = "done",
     hasGitChanges = false,
+    copySourceId?: string,
   ): Promise<void> {
     if (this.closed) return;
     this.closed = true;
@@ -301,6 +302,7 @@ export class CardKitStream {
         runId: this.runId,
         streaming: false,
         hasGitChanges,
+        copySourceId: finalStatus === "done" ? copySourceId : undefined,
       });
       const updateRes = await fetch(`${this.baseUrl()}/open-apis/cardkit/v1/cards/${this.cardId}`, {
         method: "PUT",

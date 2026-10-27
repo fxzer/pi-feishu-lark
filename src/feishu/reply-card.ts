@@ -52,6 +52,7 @@ type ReplyCardTransport = {
   updateText?(messageId: string, text: string): Promise<void>;
   /** 记录本 bot 出站消息，供 groupAlsoOnReply */
   rememberOutboundMessageId?(messageId: string): void;
+  rememberMarkdownCopySource?(copySourceId: string, markdown: string): void;
 };
 
 function resolveStreamOptions(override?: ReplyCardStreamOptions) {
@@ -138,6 +139,9 @@ export class ReplyCard implements ReplyCardSink {
         this.replyToMessageId,
         async (text) => {
           // CardKit 失败：回落为普通最终卡片
+          if (text.trim()) {
+            this.transport.rememberMarkdownCopySource?.(this.runId, text);
+          }
           const id = await this.transport.replyCard(
             this.replyToMessageId,
             buildReplyCard({
@@ -145,6 +149,7 @@ export class ReplyCard implements ReplyCardSink {
               runId: this.runId,
               status: "done",
               progress: this.tools.length > 0 ? formatProgressSection(undefined, this.tools, false) : undefined,
+              copySourceId: this.runId,
               body: text,
             }),
           );
@@ -352,6 +357,10 @@ export class ReplyCard implements ReplyCardSink {
     }
     const finalProgress = progressParts.join("\n\n");
     const hasGitChanges = gitDiff.count > 0;
+    const copySourceId = status === "done" ? this.runId : undefined;
+    if (copySourceId && this.body.trim()) {
+      this.transport.rememberMarkdownCopySource?.(copySourceId, this.body);
+    }
 
     if (this.cardkit) {
       this.cardkit.setProgress(finalProgress);
@@ -360,6 +369,7 @@ export class ReplyCard implements ReplyCardSink {
         this.body,
         status === "failed" ? "failed" : status === "stopped" ? "stopped" : "done",
         hasGitChanges,
+        copySourceId,
       );
       return;
     }
@@ -376,6 +386,7 @@ export class ReplyCard implements ReplyCardSink {
             note: status === "done" ? undefined : this.note,
             progress: finalProgress,
             hasGitChanges,
+            copySourceId,
             body: this.body,
           }),
         );

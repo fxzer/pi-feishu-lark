@@ -232,8 +232,11 @@ test("CardKit and ReplyCard done cards contain quick action buttons", () => {
     status: "done",
     body: "完成回答",
     hasGitChanges: true,
+    copySourceId: "copy-id-1",
   });
   const ckStr = JSON.stringify(cardkitDone);
+  assert.match(ckStr, /复制原文/);
+  assert.match(ckStr, /pi_feishu_copy_markdown/);
   assert.match(ckStr, /查看完整 Diff/);
   assert.match(ckStr, /运行项目测试/);
 
@@ -242,10 +245,43 @@ test("CardKit and ReplyCard done cards contain quick action buttons", () => {
     status: "done",
     body: "完成回答",
     hasGitChanges: false,
+    copySourceId: "copy-id-2",
   });
   const rpStr = JSON.stringify(replyDone);
+  assert.match(rpStr, /复制原文/);
+  assert.match(rpStr, /pi_feishu_copy_markdown/);
   assert.doesNotMatch(rpStr, /查看完整 Diff/);
   assert.match(rpStr, /运行项目测试/);
+});
+
+test("ReplyCard done records copy source on transport", async () => {
+  let savedSourceId = "";
+  let savedMarkdown = "";
+  const updatedCards: any[] = [];
+  const fakeTransport = {
+    async replyCard(_msgId: string, card: object) {
+      return "fake-card-id";
+    },
+    async updateCard(_msgId: string, card: object) {
+      updatedCards.push(card);
+    },
+    rememberMarkdownCopySource(sourceId: string, markdown: string) {
+      savedSourceId = sourceId;
+      savedMarkdown = markdown;
+    },
+  };
+
+  const reply = new ReplyCard("p2p:test", "msg-123", fakeTransport, { enabled: false });
+  await reply.start();
+  reply.append("Markdown 内容：# 标题");
+  await reply.finish("done");
+
+  assert.equal(savedSourceId, reply.runId);
+  assert.equal(savedMarkdown, "Markdown 内容：# 标题");
+  assert.ok(updatedCards.length >= 1);
+  const finalCardStr = JSON.stringify(updatedCards[updatedCards.length - 1]);
+  assert.match(finalCardStr, /复制原文/);
+  assert.match(finalCardStr, /pi_feishu_copy_markdown/);
 });
 
 test("getGitDiffSummary handles non-repo or clean repo safely", () => {

@@ -441,7 +441,7 @@ export class FeishuTransport {
       });
   }
 
-  private rememberMarkdownCopySource(copySourceId: string, markdown: string) {
+  rememberMarkdownCopySource(copySourceId: string, markdown: string) {
     this.markdownCopySources.set(copySourceId, markdown);
     this.markdownCopySourceOrder.push(copySourceId);
     while (this.markdownCopySourceOrder.length > 200) {

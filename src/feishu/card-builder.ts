@@ -54,8 +54,22 @@ export function getGitDiffSummary(cwd?: string): { summary?: string; count: numb
   }
 }
 
-export function buildQuickActionButtons(key: string, hasGitChanges = false): object[] {
+export function buildQuickActionButtons(key: string, hasGitChanges = false, copySourceId?: string): object[] {
   const buttons: object[] = [];
+  if (copySourceId) {
+    buttons.push({
+      tag: "button",
+      type: "default",
+      text: { tag: "plain_text", content: "复制原文" },
+      value: { action: "pi_feishu_copy_markdown", copySourceId },
+      behaviors: [
+        {
+          type: "callback",
+          value: { action: "pi_feishu_copy_markdown", copySourceId },
+        },
+      ],
+    });
+  }
   if (hasGitChanges) {
     buttons.push({
       tag: "button",
@@ -97,8 +111,16 @@ export function buildQuickActionButtons(key: string, hasGitChanges = false): obj
   return buttons;
 }
 
-export function buildReplyCardQuickActionButtons(key: string, hasGitChanges = false): object[] {
+export function buildReplyCardQuickActionButtons(key: string, hasGitChanges = false, copySourceId?: string): object[] {
   const actions: object[] = [];
+  if (copySourceId) {
+    actions.push({
+      tag: "button",
+      type: "default",
+      text: { tag: "plain_text", content: "复制原文" },
+      value: { action: "pi_feishu_copy_markdown", copySourceId },
+    });
+  }
   if (hasGitChanges) {
     actions.push({
       tag: "button",
@@ -221,6 +243,7 @@ export function buildCardKitCardJson(input: {
   note?: string;
   progress?: string;
   hasGitChanges?: boolean;
+  copySourceId?: string;
   streaming?: boolean;
   printFrequencyMs?: number;
   printStep?: number;
@@ -262,7 +285,7 @@ export function buildCardKitCardJson(input: {
       element_id: "content",
     });
     if (input.key) {
-      elements.push(...buildQuickActionButtons(input.key, Boolean(input.hasGitChanges)));
+      elements.push(...buildQuickActionButtons(input.key, Boolean(input.hasGitChanges), input.copySourceId));
     }
   } else {
     const parts: string[] = [];
@@ -312,6 +335,7 @@ export function buildReplyCard(input: {
   body?: string;
   progress?: string;
   hasGitChanges?: boolean;
+  copySourceId?: string;
   runId?: string;
 }) {
   const running = input.status === "running";
@@ -366,7 +390,7 @@ export function buildReplyCard(input: {
     if (input.key) {
       elements.push({
         tag: "action",
-        actions: buildReplyCardQuickActionButtons(input.key, Boolean(input.hasGitChanges)),
+        actions: buildReplyCardQuickActionButtons(input.key, Boolean(input.hasGitChanges), input.copySourceId),
       });
     }
   } else {
