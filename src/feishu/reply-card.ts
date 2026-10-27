@@ -10,6 +10,7 @@ import {
   defaultFinalNote,
   formatProgressSection,
   formatToolSummary,
+  getGitDiffSummary,
   type ReplyCardStatus,
   type ToolStep,
 } from "./card-builder.ts";
@@ -100,6 +101,7 @@ export class ReplyCard implements ReplyCardSink {
   private readonly key: string;
   private readonly replyToMessageId: string;
   private readonly transport: ReplyCardTransport;
+  private readonly workspace?: string;
   private tools: ToolStep[] = [];
   private currentAction = "正在思考…";
   private lastProgressPush = 0;
@@ -111,11 +113,13 @@ export class ReplyCard implements ReplyCardSink {
     replyToMessageId: string,
     transport: ReplyCardTransport,
     streamOptions?: ReplyCardStreamOptions,
+    workspace?: string,
   ) {
     this.key = key;
     this.replyToMessageId = replyToMessageId;
     this.transport = transport;
     this.streamOpts = resolveStreamOptions(streamOptions);
+    this.workspace = workspace;
   }
 
   get messageId() {
@@ -337,15 +341,26 @@ export class ReplyCard implements ReplyCardSink {
       this.progressTimer = null;
     }
 
-    // 最终总结：有工具步骤时收拢展示执行过程；无工具步骤则为空
-    const finalProgress = this.tools.length > 0
-      ? formatProgressSection(undefined, this.tools, false)
-      : "";
+    // 最终总结：有工具步骤时收拢展示执行过程；有代码变更时附加代码变更面板
+    const progressParts: string[] = [];
+    if (this.tools.length > 0) {
+      progressParts.push(formatProgressSection(undefined, this.tools, false));
+    }
+    const gitDiff = status === "done" ? getGitDiffSummary(this.workspace) : { count: 0 };
+    if (gitDiff.summary) {
+      progressParts.push(gitDiff.summary);
+    }
+    const finalProgress = progressParts.join("\n\n");
+    const hasGitChanges = gitDiff.count > 0;
 
     if (this.cardkit) {
       this.cardkit.setProgress(finalProgress);
-      // 同一张 CardKit 卡上关闭流式并更新 header（回复/已停止/出错了）
-      await this.cardkit.close(this.body, status === "failed" ? "failed" : status === "stopped" ? "stopped" : "done");
+      // 同一张 CardKit 卡上关闭流式并更新 header（回复/已停止/出错了），并附带快捷操作栏
+      await this.cardkit.close(
+        this.body,
+        status === "failed" ? "failed" : status === "stopped" ? "stopped" : "done",
+        hasGitChanges,
+      );
       return;
     }
 
@@ -360,6 +375,7 @@ export class ReplyCard implements ReplyCardSink {
             status,
             note: status === "done" ? undefined : this.note,
             progress: finalProgress,
+            hasGitChanges,
             body: this.body,
           }),
         );

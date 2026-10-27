@@ -137,12 +137,19 @@ export class FeishuMessageHandler {
       const prompt = buildPromptWithQuote(basePrompt, quoted);
       // 单卡：全程 header；流式参数来自 config/env
       const useStreaming = cfg?.streamingReply !== false;
-      const card = new ReplyCard(key, msg.messageId, transport, {
-        enabled: useStreaming,
-        printFrequencyMs: cfg?.streamPrintFrequencyMs,
-        printStep: cfg?.streamPrintStep,
-        pushIntervalMs: cfg?.streamPushIntervalMs,
-      });
+      const workspace = this.conversations.getWorkspace(key);
+      const card = new ReplyCard(
+        key,
+        msg.messageId,
+        transport,
+        {
+          enabled: useStreaming,
+          printFrequencyMs: cfg?.streamPrintFrequencyMs,
+          printStep: cfg?.streamPrintStep,
+          pushIntervalMs: cfg?.streamPushIntervalMs,
+        },
+        workspace,
+      );
       await card.start();
 
       await this.conversations.promptWithImages(

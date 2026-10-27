@@ -2,7 +2,10 @@
  * 飞书交互卡片回调的统一处理（/model、/thinking、/resume、停止按钮、复制按钮）。
  * 只依赖 ConversationRuntime 接口与飞书公共层，各 Runtime 适配器直接复用。
  */
-import { buildCardKitCardJson } from "./card-builder.ts";
+import {
+  buildCardKitCardJson,
+  parseQuickPromptActionValue,
+} from "./card-builder.ts";
 import {
   buildModelCard,
   buildResumeCard,
@@ -15,8 +18,9 @@ import {
   parseWorkspaceNavActionValue,
   parseWorkspaceSelectActionValue,
 } from "./cards.ts";
+import { loadConfig } from "./config.ts";
 import { debugLog } from "./debug.ts";
-import { parseStopTaskActionValue } from "./reply-card.ts";
+import { parseStopTaskActionValue, ReplyCard } from "./reply-card.ts";
 import type { ConversationRuntime } from "./runtime.ts";
 import type { FeishuTransport } from "./transport.ts";
 import type { FeishuCardAction } from "./types.ts";
@@ -31,6 +35,45 @@ export function createCardActionHandler(
     if (copy) {
       const source = transport?.getMarkdownCopySource(copy.copySourceId);
       await transport?.replyPlainText(action.messageId, source || "MD 原文已过期，请重新生成卡片。");
+      return;
+    }
+
+    const quickPrompt = parseQuickPromptActionValue(action.value);
+    if (quickPrompt) {
+      debugLog("feishu.card.quick_prompt_requested", {
+        key: quickPrompt.key,
+        prompt: quickPrompt.prompt,
+        messageId: action.messageId,
+      });
+      if (transport) {
+        const cfg = loadConfig();
+        const useStreaming = cfg?.streamingReply !== false;
+        const workspace = conversations.getWorkspace(quickPrompt.key);
+        const replyCard = new ReplyCard(
+          quickPrompt.key,
+          action.messageId,
+          transport,
+          {
+            enabled: useStreaming,
+            printFrequencyMs: cfg?.streamPrintFrequencyMs,
+            printStep: cfg?.streamPrintStep,
+            pushIntervalMs: cfg?.streamPushIntervalMs,
+          },
+          workspace,
+        );
+        await replyCard.start();
+
+        void conversations.promptWithImages(
+          quickPrompt.key,
+          quickPrompt.prompt,
+          [],
+          async (reply) => {
+            await replyCard.completeWithAnswer(reply || "（无内容）");
+          },
+          replyCard,
+          useStreaming ? (delta) => replyCard.append(delta) : undefined,
+        );
+      }
       return;
     }
 

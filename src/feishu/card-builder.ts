@@ -1,4 +1,6 @@
 /** 单卡 UI 纯函数：构建飞书 interactive / CardKit 卡片 JSON（无 IO） */
+import { execFileSync } from "node:child_process";
+
 export type ReplyCardStatus = "running" | "done" | "failed" | "stopped" | "inactive";
 
 export type ToolStep = {
@@ -11,8 +13,114 @@ export type ToolStep = {
 };
 
 export const STOP_ACTION = "pi_feishu_stop_task";
+export const QUICK_PROMPT_ACTION = "pi_feishu_quick_prompt";
 const MAX_NOTE_CHARS = 96;
 const WAITING_TEXT = "正在回复…";
+
+export function parseQuickPromptActionValue(value: unknown): { key: string; prompt: string } | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as any;
+  if (raw.action !== QUICK_PROMPT_ACTION) return undefined;
+  if (typeof raw.key !== "string" || !raw.key) return undefined;
+  if (typeof raw.prompt !== "string" || !raw.prompt) return undefined;
+  return { key: raw.key, prompt: raw.prompt };
+}
+
+export function getGitDiffSummary(cwd?: string): { summary?: string; count: number } {
+  if (!cwd) return { count: 0 };
+  try {
+    const raw = execFileSync("git", ["status", "--short"], {
+      cwd,
+      timeout: 2000,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (!raw) return { count: 0 };
+
+    const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) return { count: 0 };
+
+    const maxFiles = 6;
+    const displayLines = lines.slice(0, maxFiles);
+    const formatted = displayLines.map((line) => `> - \`${line}\``);
+    if (lines.length > maxFiles) {
+      formatted.push(`> ... 其余 ${lines.length - maxFiles} 个改动文件已折叠`);
+    }
+
+    const summary = `> **代码变更** (共 ${lines.length} 个文件)\n${formatted.join("\n")}`;
+    return { summary, count: lines.length };
+  } catch {
+    return { count: 0 };
+  }
+}
+
+export function buildQuickActionButtons(key: string, hasGitChanges = false): object[] {
+  const buttons: object[] = [];
+  if (hasGitChanges) {
+    buttons.push({
+      tag: "button",
+      type: "primary",
+      text: { tag: "plain_text", content: "查看完整 Diff" },
+      value: { action: QUICK_PROMPT_ACTION, key, prompt: "查看当前工作区 git diff 完整变动" },
+      behaviors: [
+        {
+          type: "callback",
+          value: { action: QUICK_PROMPT_ACTION, key, prompt: "查看当前工作区 git diff 完整变动" },
+        },
+      ],
+    });
+  }
+  buttons.push({
+    tag: "button",
+    type: "default",
+    text: { tag: "plain_text", content: "运行项目测试" },
+    value: { action: QUICK_PROMPT_ACTION, key, prompt: "运行项目测试并汇报结果" },
+    behaviors: [
+      {
+        type: "callback",
+        value: { action: QUICK_PROMPT_ACTION, key, prompt: "运行项目测试并汇报结果" },
+      },
+    ],
+  });
+  buttons.push({
+    tag: "button",
+    type: "default",
+    text: { tag: "plain_text", content: "查看状态" },
+    value: { action: QUICK_PROMPT_ACTION, key, prompt: "/status" },
+    behaviors: [
+      {
+        type: "callback",
+        value: { action: QUICK_PROMPT_ACTION, key, prompt: "/status" },
+      },
+    ],
+  });
+  return buttons;
+}
+
+export function buildReplyCardQuickActionButtons(key: string, hasGitChanges = false): object[] {
+  const actions: object[] = [];
+  if (hasGitChanges) {
+    actions.push({
+      tag: "button",
+      type: "primary",
+      text: { tag: "plain_text", content: "查看完整 Diff" },
+      value: { action: QUICK_PROMPT_ACTION, key, prompt: "查看当前工作区 git diff 完整变动" },
+    });
+  }
+  actions.push({
+    tag: "button",
+    type: "default",
+    text: { tag: "plain_text", content: "运行项目测试" },
+    value: { action: QUICK_PROMPT_ACTION, key, prompt: "运行项目测试并汇报结果" },
+  });
+  actions.push({
+    tag: "button",
+    type: "default",
+    text: { tag: "plain_text", content: "查看状态" },
+    value: { action: QUICK_PROMPT_ACTION, key, prompt: "/status" },
+  });
+  return actions;
+}
 
 export function formatToolSummary(name: string, args: any): string {
   if (!args || typeof args !== "object") return name;
@@ -112,6 +220,7 @@ export function buildCardKitCardJson(input: {
   runId?: string;
   note?: string;
   progress?: string;
+  hasGitChanges?: boolean;
   streaming?: boolean;
   printFrequencyMs?: number;
   printStep?: number;
@@ -152,6 +261,9 @@ export function buildCardKitCardJson(input: {
       content: fullContent,
       element_id: "content",
     });
+    if (input.key) {
+      elements.push(...buildQuickActionButtons(input.key, Boolean(input.hasGitChanges)));
+    }
   } else {
     const parts: string[] = [];
     if (note) parts.push(note);
@@ -199,6 +311,7 @@ export function buildReplyCard(input: {
   note?: string;
   body?: string;
   progress?: string;
+  hasGitChanges?: boolean;
   runId?: string;
 }) {
   const running = input.status === "running";
@@ -250,6 +363,12 @@ export function buildReplyCard(input: {
       tag: "div",
       text: { tag: "lark_md", content: body || " " },
     });
+    if (input.key) {
+      elements.push({
+        tag: "action",
+        actions: buildReplyCardQuickActionButtons(input.key, Boolean(input.hasGitChanges)),
+      });
+    }
   } else {
     if (note) {
       elements.push({

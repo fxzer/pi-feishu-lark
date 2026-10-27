@@ -241,7 +241,11 @@ export class CardKitStream {
    * 2) 关闭 streaming_mode
    * 3) 全量更新卡片（header 改为「回复」/绿，避免一直停在「回复中」）
    */
-  async close(finalText?: string, finalStatus: "done" | "stopped" | "failed" = "done"): Promise<void> {
+  async close(
+    finalText?: string,
+    finalStatus: "done" | "stopped" | "failed" = "done",
+    hasGitChanges = false,
+  ): Promise<void> {
     if (this.closed) return;
     this.closed = true;
     if (finalText) this.ensureFinal(finalText);
@@ -288,7 +292,7 @@ export class CardKitStream {
         });
       }
 
-      // 再全量更新卡片：header 改为最终状态，并去掉停止按钮
+      // 再全量更新卡片：header 改为最终状态，并去掉停止按钮（附带快捷操作）
       const finalCard = buildCardKitCardJson({
         status: finalStatus,
         body: this.fullText,
@@ -296,6 +300,7 @@ export class CardKitStream {
         key: this.conversationKey,
         runId: this.runId,
         streaming: false,
+        hasGitChanges,
       });
       const updateRes = await fetch(`${this.baseUrl()}/open-apis/cardkit/v1/cards/${this.cardId}`, {
         method: "PUT",

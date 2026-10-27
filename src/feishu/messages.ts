@@ -80,6 +80,21 @@ export function parseMessageInput(
       collectAttachments(json, attachments);
       return { text: "", attachments, source: "image" };
     }
+    if (msg.msgType === "audio") {
+      const audioText = typeof json.text === "string" ? json.text.trim() : "";
+      if (audioText) {
+        return { text: audioText, attachments, source: "audio-asr" };
+      }
+      if (typeof json.file_key === "string" && json.file_key) {
+        attachments.push({
+          kind: "file",
+          fileKey: json.file_key,
+          fileName: `voice_${json.duration || 0}ms.amr`,
+        });
+        const durationSec = json.duration ? `${Math.round(json.duration / 1000)}秒` : "";
+        return { text: `[语音消息 ${durationSec}]`.trim(), attachments, source: "audio" };
+      }
+    }
     if (msg.msgType === "file" && typeof json.file_key === "string" && json.file_key) {
       attachments.push({
         kind: "file",

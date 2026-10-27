@@ -2,12 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildCardKitCardJson,
+  buildQuickActionButtons,
   buildReplyCard,
   buildStopButton,
   formatProgressSection,
   formatToolStepsMarkdown,
   formatToolSummary,
+  getGitDiffSummary,
+  parseQuickPromptActionValue,
   parseStopTaskActionValue,
+  QUICK_PROMPT_ACTION,
   STOP_ACTION,
   type ToolStep,
 } from "../src/feishu/card-builder.ts";
@@ -196,4 +200,55 @@ test("ReplyCard captures tool execution lifecycle and updates status", async () 
   assert.match(jsonStr, /执行过程/);
   assert.match(jsonStr, /npm test/);
   assert.match(jsonStr, /测试全部通过！/);
+});
+
+test("parseQuickPromptActionValue validates quick prompt payload", () => {
+  assert.equal(parseQuickPromptActionValue(null), undefined);
+  assert.equal(parseQuickPromptActionValue({ action: "other" }), undefined);
+  const valid = parseQuickPromptActionValue({
+    action: QUICK_PROMPT_ACTION,
+    key: "p2p:user1",
+    prompt: "git diff",
+  });
+  assert.deepEqual(valid, { key: "p2p:user1", prompt: "git diff" });
+});
+
+test("buildQuickActionButtons renders diff button when hasGitChanges is true", () => {
+  const withDiff = buildQuickActionButtons("key-1", true);
+  const jsonWith = JSON.stringify(withDiff);
+  assert.match(jsonWith, /查看完整 Diff/);
+  assert.match(jsonWith, /运行项目测试/);
+  assert.match(jsonWith, /查看状态/);
+
+  const withoutDiff = buildQuickActionButtons("key-1", false);
+  const jsonWithout = JSON.stringify(withoutDiff);
+  assert.doesNotMatch(jsonWithout, /查看完整 Diff/);
+  assert.match(jsonWithout, /运行项目测试/);
+});
+
+test("CardKit and ReplyCard done cards contain quick action buttons", () => {
+  const cardkitDone = buildCardKitCardJson({
+    key: "p2p:user",
+    status: "done",
+    body: "完成回答",
+    hasGitChanges: true,
+  });
+  const ckStr = JSON.stringify(cardkitDone);
+  assert.match(ckStr, /查看完整 Diff/);
+  assert.match(ckStr, /运行项目测试/);
+
+  const replyDone = buildReplyCard({
+    key: "p2p:user",
+    status: "done",
+    body: "完成回答",
+    hasGitChanges: false,
+  });
+  const rpStr = JSON.stringify(replyDone);
+  assert.doesNotMatch(rpStr, /查看完整 Diff/);
+  assert.match(rpStr, /运行项目测试/);
+});
+
+test("getGitDiffSummary handles non-repo or clean repo safely", () => {
+  assert.equal(getGitDiffSummary(undefined).count, 0);
+  assert.equal(getGitDiffSummary("/tmp/non-existent-dir-123456").count, 0);
 });
