@@ -1,5 +1,6 @@
 import http from "node:http";
 import { debugLog } from "./debug.ts";
+import { wrapCardActionCallbackResult } from "./transport.ts";
 import type { FeishuCardAction, FeishuConfig } from "./types.ts";
 
 export class FeishuCardActionWebhook {
@@ -50,13 +51,9 @@ export class FeishuCardActionWebhook {
       });
       try {
         const result = await this.onCardAction(action);
-        // Feishu/Lark requires the webhook response body to use the wrapped format:
-        //   { "card": { "type": "raw", "data": { ... card JSON ... } } }
-        // The Lark SDK's adaptDefault sends the return value as-is, so we wrap here.
-        if (result) {
-          return { card: { type: "raw", data: result } };
-        }
-        return result;
+        // Feishu/Lark requires the webhook response body to use:
+        //   { "card": { "type": "raw", "data": { ... card JSON ... } } } or { "toast": { ... } }
+        return wrapCardActionCallbackResult(result);
       } catch (handlerError) {
         debugLog("feishu.card.webhook.handler_failed", {
           messageId: action.messageId,

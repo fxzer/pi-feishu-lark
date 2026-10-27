@@ -252,12 +252,9 @@ export class FeishuTransport {
       value: data?.action?.value,
     }, "ws");
     // The WSClient sends the return value back to the Feishu platform as
-    // the card callback response. It must use the wrapped format:
-    //   { "card": { "type": "raw", "data": { ... card JSON ... } } }
-    if (result) {
-      return { card: { type: "raw", data: result } };
-    }
-    return result;
+    // the card callback response. Card update uses { card: { type: "raw", data: ... } },
+    // while Toast notification uses { toast: { type: "success", content: ... } }.
+    return wrapCardActionCallbackResult(result);
   }
 
   private async handleCardActionAction(action: FeishuCardAction, mode: "ws" | "webhook") {
@@ -645,4 +642,19 @@ async function streamToBuffer(readable: NodeJS.ReadableStream): Promise<Buffer> 
 
 function readableFromDownload(result: any): NodeJS.ReadableStream {
   return typeof result?.getReadableStream === "function" ? result.getReadableStream() : result;
+}
+
+export function wrapCardActionCallbackResult(result: unknown): object | undefined {
+  if (!result || typeof result !== "object") return undefined;
+  const raw = result as Record<string, any>;
+  if ("toast" in raw) {
+    if ("card" in raw) {
+      return {
+        toast: raw.toast,
+        card: { type: "raw", data: raw.card },
+      };
+    }
+    return { toast: raw.toast };
+  }
+  return { card: { type: "raw", data: result } };
 }

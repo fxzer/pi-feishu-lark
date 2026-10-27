@@ -2,6 +2,7 @@
  * 飞书交互卡片回调的统一处理（/model、/thinking、/resume、停止按钮、复制按钮）。
  * 只依赖 ConversationRuntime 接口与飞书公共层，各 Runtime 适配器直接复用。
  */
+import { spawnSync } from "node:child_process";
 import {
   buildCardKitCardJson,
   parseQuickPromptActionValue,
@@ -34,8 +35,29 @@ export function createCardActionHandler(
     const copy = parseCopyMarkdownActionValue(action.value);
     if (copy) {
       const source = transport?.getMarkdownCopySource(copy.copySourceId);
-      await transport?.replyPlainText(action.messageId, source || "MD 原文已过期，请重新生成卡片。");
-      return;
+      if (source) {
+        copyToSystemClipboard(source);
+        return {
+          toast: {
+            type: "success",
+            content: `已复制到剪贴板（共 ${source.length} 字）`,
+            i18n: {
+              zh_cn: `已复制到剪贴板（共 ${source.length} 字）`,
+              en_us: `Copied to clipboard (${source.length} chars)`,
+            },
+          },
+        };
+      }
+      return {
+        toast: {
+          type: "warning",
+          content: "MD 原文已过期，请重新生成卡片",
+          i18n: {
+            zh_cn: "MD 原文已过期，请重新生成卡片",
+            en_us: "Markdown source expired",
+          },
+        },
+      };
     }
 
     const quickPrompt = parseQuickPromptActionValue(action.value);
@@ -167,4 +189,26 @@ function parseCopyMarkdownActionValue(value: unknown): { copySourceId: string } 
   if (raw.action !== "pi_feishu_copy_markdown") return undefined;
   if (typeof raw.copySourceId !== "string" || !raw.copySourceId) return undefined;
   return { copySourceId: raw.copySourceId };
+}
+
+export function copyToSystemClipboard(text: string): boolean {
+  if (process.platform === "darwin") {
+    try {
+      const res = spawnSync("pbcopy", { input: text, encoding: "utf-8" });
+      return res.status === 0;
+    } catch {
+      return false;
+    }
+  }
+  if (process.platform === "linux") {
+    try {
+      const res = spawnSync("xclip", ["-selection", "clipboard"], { input: text, encoding: "utf-8" });
+      if (res.status === 0) return true;
+    } catch {}
+    try {
+      const res = spawnSync("wl-copy", { input: text, encoding: "utf-8" });
+      if (res.status === 0) return true;
+    } catch {}
+  }
+  return false;
 }

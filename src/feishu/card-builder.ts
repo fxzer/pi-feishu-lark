@@ -60,6 +60,7 @@ export function buildQuickActionButtons(key: string, hasGitChanges = false, copy
     buttons.push({
       tag: "button",
       type: "default",
+      size: "small",
       text: { tag: "plain_text", content: "复制原文" },
       value: { action: "pi_feishu_copy_markdown", copySourceId },
       behaviors: [
@@ -74,6 +75,7 @@ export function buildQuickActionButtons(key: string, hasGitChanges = false, copy
     buttons.push({
       tag: "button",
       type: "primary",
+      size: "small",
       text: { tag: "plain_text", content: "查看完整 Diff" },
       value: { action: QUICK_PROMPT_ACTION, key, prompt: "查看当前工作区 git diff 完整变动" },
       behaviors: [
@@ -87,6 +89,7 @@ export function buildQuickActionButtons(key: string, hasGitChanges = false, copy
   buttons.push({
     tag: "button",
     type: "default",
+    size: "small",
     text: { tag: "plain_text", content: "运行项目测试" },
     value: { action: QUICK_PROMPT_ACTION, key, prompt: "运行项目测试并汇报结果" },
     behaviors: [
@@ -99,6 +102,7 @@ export function buildQuickActionButtons(key: string, hasGitChanges = false, copy
   buttons.push({
     tag: "button",
     type: "default",
+    size: "small",
     text: { tag: "plain_text", content: "查看状态" },
     value: { action: QUICK_PROMPT_ACTION, key, prompt: "/status" },
     behaviors: [
@@ -117,6 +121,7 @@ export function buildReplyCardQuickActionButtons(key: string, hasGitChanges = fa
     actions.push({
       tag: "button",
       type: "default",
+      size: "small",
       text: { tag: "plain_text", content: "复制原文" },
       value: { action: "pi_feishu_copy_markdown", copySourceId },
     });
@@ -125,6 +130,7 @@ export function buildReplyCardQuickActionButtons(key: string, hasGitChanges = fa
     actions.push({
       tag: "button",
       type: "primary",
+      size: "small",
       text: { tag: "plain_text", content: "查看完整 Diff" },
       value: { action: QUICK_PROMPT_ACTION, key, prompt: "查看当前工作区 git diff 完整变动" },
     });
@@ -132,12 +138,14 @@ export function buildReplyCardQuickActionButtons(key: string, hasGitChanges = fa
   actions.push({
     tag: "button",
     type: "default",
+    size: "small",
     text: { tag: "plain_text", content: "运行项目测试" },
     value: { action: QUICK_PROMPT_ACTION, key, prompt: "运行项目测试并汇报结果" },
   });
   actions.push({
     tag: "button",
     type: "default",
+    size: "small",
     text: { tag: "plain_text", content: "查看状态" },
     value: { action: QUICK_PROMPT_ACTION, key, prompt: "/status" },
   });
@@ -285,7 +293,19 @@ export function buildCardKitCardJson(input: {
       element_id: "content",
     });
     if (input.key) {
-      elements.push(...buildQuickActionButtons(input.key, Boolean(input.hasGitChanges), input.copySourceId));
+      const buttons = buildQuickActionButtons(input.key, Boolean(input.hasGitChanges), input.copySourceId);
+      if (buttons.length > 0) {
+        elements.push({
+          tag: "column_set",
+          flex_mode: "none",
+          horizontal_spacing: "small",
+          columns: buttons.map((btn) => ({
+            tag: "column",
+            width: "auto",
+            elements: [btn],
+          })),
+        });
+      }
     }
   } else {
     const parts: string[] = [];

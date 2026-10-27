@@ -15,6 +15,8 @@ import {
   STOP_ACTION,
   type ToolStep,
 } from "../src/feishu/card-builder.ts";
+import { createCardActionHandler } from "../src/feishu/card-actions.ts";
+import { wrapCardActionCallbackResult } from "../src/feishu/transport.ts";
 import { ReplyCard } from "../src/feishu/reply-card.ts";
 
 function hasStopControl(card: unknown) {
@@ -235,6 +237,8 @@ test("CardKit and ReplyCard done cards contain quick action buttons", () => {
     copySourceId: "copy-id-1",
   });
   const ckStr = JSON.stringify(cardkitDone);
+  assert.match(ckStr, /"tag":"column_set"/);
+  assert.match(ckStr, /"flex_mode":"none"/);
   assert.match(ckStr, /复制原文/);
   assert.match(ckStr, /pi_feishu_copy_markdown/);
   assert.match(ckStr, /查看完整 Diff/);
@@ -287,4 +291,71 @@ test("ReplyCard done records copy source on transport", async () => {
 test("getGitDiffSummary handles non-repo or clean repo safely", () => {
   assert.equal(getGitDiffSummary(undefined).count, 0);
   assert.equal(getGitDiffSummary("/tmp/non-existent-dir-123456").count, 0);
+});
+
+test("createCardActionHandler returns toast without replying text message on copy", async () => {
+  let repliedTextCount = 0;
+  const fakeTransport = {
+    getMarkdownCopySource(id: string) {
+      if (id === "valid-id") return "# 成功复制的内容";
+      return undefined;
+    },
+    async replyPlainText() {
+      repliedTextCount++;
+    },
+  };
+
+  const handler = createCardActionHandler({} as any, () => fakeTransport as any);
+
+  // 1. Valid copy action
+  const res1 = await handler({
+    messageId: "msg-1",
+    chatId: "chat-1",
+    operatorOpenId: "user-1",
+    value: { action: "pi_feishu_copy_markdown", copySourceId: "valid-id" },
+  });
+
+  assert.equal(repliedTextCount, 0, "must not send plain text message");
+  assert.deepEqual(res1, {
+    toast: {
+      type: "success",
+      content: "已复制到剪贴板（共 9 字）",
+      i18n: {
+        zh_cn: "已复制到剪贴板（共 9 字）",
+        en_us: "Copied to clipboard (9 chars)",
+      },
+    },
+  });
+
+  // 2. Expired copy action
+  const res2 = await handler({
+    messageId: "msg-1",
+    chatId: "chat-1",
+    operatorOpenId: "user-1",
+    value: { action: "pi_feishu_copy_markdown", copySourceId: "expired-id" },
+  });
+
+  assert.equal(repliedTextCount, 0);
+  assert.deepEqual(res2, {
+    toast: {
+      type: "warning",
+      content: "MD 原文已过期，请重新生成卡片",
+      i18n: {
+        zh_cn: "MD 原文已过期，请重新生成卡片",
+        en_us: "Markdown source expired",
+      },
+    },
+  });
+});
+
+test("wrapCardActionCallbackResult preserves toast and wraps cards", () => {
+  assert.equal(wrapCardActionCallbackResult(undefined), undefined);
+
+  // Toast only
+  const toastRes = wrapCardActionCallbackResult({ toast: { type: "success", content: "ok" } });
+  assert.deepEqual(toastRes, { toast: { type: "success", content: "ok" } });
+
+  // Normal Card
+  const cardRes = wrapCardActionCallbackResult({ header: { title: "hi" } });
+  assert.deepEqual(cardRes, { card: { type: "raw", data: { header: { title: "hi" } } } });
 });
