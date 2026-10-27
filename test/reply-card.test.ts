@@ -215,17 +215,16 @@ test("parseQuickPromptActionValue validates quick prompt payload", () => {
   assert.deepEqual(valid, { key: "p2p:user1", prompt: "git diff" });
 });
 
-test("buildQuickActionButtons renders diff button when hasGitChanges is true", () => {
-  const withDiff = buildQuickActionButtons("key-1", true);
-  const jsonWith = JSON.stringify(withDiff);
-  assert.match(jsonWith, /查看完整 Diff/);
-  assert.match(jsonWith, /运行项目测试/);
-  assert.match(jsonWith, /查看状态/);
+test("buildQuickActionButtons only renders copy button when copySourceId is provided", () => {
+  const withCopy = buildQuickActionButtons("key-1", true, "copy-1");
+  const jsonWith = JSON.stringify(withCopy);
+  assert.match(jsonWith, /复制原文/);
+  assert.doesNotMatch(jsonWith, /查看完整 Diff/);
+  assert.doesNotMatch(jsonWith, /运行项目测试/);
+  assert.doesNotMatch(jsonWith, /查看状态/);
 
-  const withoutDiff = buildQuickActionButtons("key-1", false);
-  const jsonWithout = JSON.stringify(withoutDiff);
-  assert.doesNotMatch(jsonWithout, /查看完整 Diff/);
-  assert.match(jsonWithout, /运行项目测试/);
+  const withoutCopy = buildQuickActionButtons("key-1", true);
+  assert.equal(withoutCopy.length, 0);
 });
 
 test("CardKit and ReplyCard done cards contain quick action buttons", () => {
@@ -241,8 +240,9 @@ test("CardKit and ReplyCard done cards contain quick action buttons", () => {
   assert.match(ckStr, /"flex_mode":"none"/);
   assert.match(ckStr, /复制原文/);
   assert.match(ckStr, /pi_feishu_copy_markdown/);
-  assert.match(ckStr, /查看完整 Diff/);
-  assert.match(ckStr, /运行项目测试/);
+  assert.doesNotMatch(ckStr, /查看完整 Diff/);
+  assert.doesNotMatch(ckStr, /运行项目测试/);
+  assert.doesNotMatch(ckStr, /查看状态/);
 
   const replyDone = buildReplyCard({
     key: "p2p:user",
@@ -255,7 +255,8 @@ test("CardKit and ReplyCard done cards contain quick action buttons", () => {
   assert.match(rpStr, /复制原文/);
   assert.match(rpStr, /pi_feishu_copy_markdown/);
   assert.doesNotMatch(rpStr, /查看完整 Diff/);
-  assert.match(rpStr, /运行项目测试/);
+  assert.doesNotMatch(rpStr, /运行项目测试/);
+  assert.doesNotMatch(rpStr, /查看状态/);
 });
 
 test("ReplyCard done records copy source on transport", async () => {

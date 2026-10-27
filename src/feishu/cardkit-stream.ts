@@ -4,7 +4,7 @@
  * 我们侧只需定期 PUT 完整 markdown 内容。
  * running 卡必须带「停止」按钮（与 card-builder 契约一致）。
  */
-import { buildCardKitCardJson } from "./card-builder.ts";
+import { buildCardKitCardJson, WAITING_TEXT } from "./card-builder.ts";
 import { debugLog } from "./debug.ts";
 import { withRetry } from "./retry.ts";
 
@@ -188,11 +188,10 @@ export class CardKitStream {
   }
 
   private getCombinedText(): string {
-    const p = this.progress.trim();
-    const b = this.fullText.trim();
-    if (p && b) return `${p}\n\n---\n\n${b}`;
-    if (p) return p;
-    return b;
+    if (this.fullText.trim()) {
+      return this.fullText;
+    }
+    return this.progress.trim() || WAITING_TEXT;
   }
 
   private async tick() {

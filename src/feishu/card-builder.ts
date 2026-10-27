@@ -15,7 +15,7 @@ export type ToolStep = {
 export const STOP_ACTION = "pi_feishu_stop_task";
 export const QUICK_PROMPT_ACTION = "pi_feishu_quick_prompt";
 const MAX_NOTE_CHARS = 96;
-const WAITING_TEXT = "正在回复…";
+export const WAITING_TEXT = "正在回复…";
 
 export function parseQuickPromptActionValue(value: unknown): { key: string; prompt: string } | undefined {
   if (!value || typeof value !== "object") return undefined;
@@ -71,47 +71,6 @@ export function buildQuickActionButtons(key: string, hasGitChanges = false, copy
       ],
     });
   }
-  if (hasGitChanges) {
-    buttons.push({
-      tag: "button",
-      type: "primary",
-      size: "small",
-      text: { tag: "plain_text", content: "查看完整 Diff" },
-      value: { action: QUICK_PROMPT_ACTION, key, prompt: "查看当前工作区 git diff 完整变动" },
-      behaviors: [
-        {
-          type: "callback",
-          value: { action: QUICK_PROMPT_ACTION, key, prompt: "查看当前工作区 git diff 完整变动" },
-        },
-      ],
-    });
-  }
-  buttons.push({
-    tag: "button",
-    type: "default",
-    size: "small",
-    text: { tag: "plain_text", content: "运行项目测试" },
-    value: { action: QUICK_PROMPT_ACTION, key, prompt: "运行项目测试并汇报结果" },
-    behaviors: [
-      {
-        type: "callback",
-        value: { action: QUICK_PROMPT_ACTION, key, prompt: "运行项目测试并汇报结果" },
-      },
-    ],
-  });
-  buttons.push({
-    tag: "button",
-    type: "default",
-    size: "small",
-    text: { tag: "plain_text", content: "查看状态" },
-    value: { action: QUICK_PROMPT_ACTION, key, prompt: "/status" },
-    behaviors: [
-      {
-        type: "callback",
-        value: { action: QUICK_PROMPT_ACTION, key, prompt: "/status" },
-      },
-    ],
-  });
   return buttons;
 }
 
@@ -126,29 +85,6 @@ export function buildReplyCardQuickActionButtons(key: string, hasGitChanges = fa
       value: { action: "pi_feishu_copy_markdown", copySourceId },
     });
   }
-  if (hasGitChanges) {
-    actions.push({
-      tag: "button",
-      type: "primary",
-      size: "small",
-      text: { tag: "plain_text", content: "查看完整 Diff" },
-      value: { action: QUICK_PROMPT_ACTION, key, prompt: "查看当前工作区 git diff 完整变动" },
-    });
-  }
-  actions.push({
-    tag: "button",
-    type: "default",
-    size: "small",
-    text: { tag: "plain_text", content: "运行项目测试" },
-    value: { action: QUICK_PROMPT_ACTION, key, prompt: "运行项目测试并汇报结果" },
-  });
-  actions.push({
-    tag: "button",
-    type: "default",
-    size: "small",
-    text: { tag: "plain_text", content: "查看状态" },
-    value: { action: QUICK_PROMPT_ACTION, key, prompt: "/status" },
-  });
   return actions;
 }
 
@@ -264,12 +200,10 @@ export function buildCardKitCardJson(input: {
 
   let fullContent = "";
   if (running) {
-    if (progress && body) {
-      fullContent = `${progress}\n\n---\n\n${body}`;
-    } else if (progress) {
-      fullContent = progress;
+    if (body) {
+      fullContent = body;
     } else {
-      fullContent = body || WAITING_TEXT;
+      fullContent = progress || WAITING_TEXT;
     }
     elements.push({
       tag: "markdown",
@@ -280,16 +214,9 @@ export function buildCardKitCardJson(input: {
       elements.push(buildStopButton(input.key, input.runId));
     }
   } else if (input.status === "done") {
-    if (progress && body) {
-      fullContent = `${progress}\n\n---\n\n${body}`;
-    } else if (progress) {
-      fullContent = progress;
-    } else {
-      fullContent = body || " ";
-    }
     elements.push({
       tag: "markdown",
-      content: fullContent,
+      content: body || " ",
       element_id: "content",
     });
     if (input.key) {
