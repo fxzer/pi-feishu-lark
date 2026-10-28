@@ -6,7 +6,7 @@
  */
 import { randomUUID } from "node:crypto";
 import {
-  buildReplyCard,
+  buildCardKitCardJson,
   defaultFinalNote,
   formatProgressSection,
   formatToolSummary,
@@ -20,7 +20,7 @@ import { debugLog } from "./debug.ts";
 
 export type { ReplyCardStatus } from "./card-builder.ts";
 export {
-  buildReplyCard,
+  buildCardKitCardJson,
   parseStopTaskActionValue,
   STOP_ACTION,
 } from "./card-builder.ts";
@@ -60,11 +60,11 @@ function resolveStreamOptions(override?: ReplyCardStreamOptions) {
   return {
     enabled: override?.enabled ?? cfg?.streamingReply !== false,
     printFrequencyMs: Math.max(
-      20,
+      10,
       override?.printFrequencyMs
         ?? parseEnvInt("FEISHU_STREAM_PRINT_FREQUENCY_MS")
         ?? cfg?.streamPrintFrequencyMs
-        ?? 50,
+        ?? 25,
     ),
     printStep: Math.max(
       1,
@@ -74,11 +74,11 @@ function resolveStreamOptions(override?: ReplyCardStreamOptions) {
         ?? 1,
     ),
     pushIntervalMs: Math.max(
-      50,
+      40,
       override?.pushIntervalMs
         ?? parseEnvInt("FEISHU_STREAM_PUSH_INTERVAL_MS")
         ?? cfg?.streamPushIntervalMs
-        ?? 120,
+        ?? 80,
     ),
   };
 }
@@ -107,7 +107,7 @@ export class ReplyCard implements ReplyCardSink {
   private currentAction = "正在思考…";
   private lastProgressPush = 0;
   private progressTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly throttleMs = 1500;
+  private readonly throttleMs = 200;
 
   constructor(
     key: string,
@@ -144,7 +144,7 @@ export class ReplyCard implements ReplyCardSink {
           }
           const id = await this.transport.replyCard(
             this.replyToMessageId,
-            buildReplyCard({
+            buildCardKitCardJson({
               key: this.key,
               runId: this.runId,
               status: "done",
@@ -178,7 +178,7 @@ export class ReplyCard implements ReplyCardSink {
     // 非流式：先出「回复中」占位卡
     this.fallbackCardId = await this.transport.replyCard(
       this.replyToMessageId,
-      buildReplyCard({
+      buildCardKitCardJson({
         key: this.key,
         runId: this.runId,
         status: "running",
@@ -289,7 +289,7 @@ export class ReplyCard implements ReplyCardSink {
       try {
         await this.transport.updateCard(
           this.fallbackCardId,
-          buildReplyCard({
+          buildCardKitCardJson({
             key: this.key,
             runId: this.runId,
             status: "running",
@@ -375,12 +375,12 @@ export class ReplyCard implements ReplyCardSink {
       return;
     }
 
-    // 静态卡路径
+    // 静态卡路径（使用 Schema 2.0 卡片）
     if (this.fallbackCardId) {
       try {
         await this.transport.updateCard(
           this.fallbackCardId,
-          buildReplyCard({
+          buildCardKitCardJson({
             key: this.key,
             runId: this.runId,
             status,

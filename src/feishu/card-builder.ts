@@ -74,20 +74,6 @@ export function buildQuickActionButtons(key: string, hasGitChanges = false, copy
   return buttons;
 }
 
-export function buildReplyCardQuickActionButtons(key: string, hasGitChanges = false, copySourceId?: string): object[] {
-  const actions: object[] = [];
-  if (copySourceId) {
-    actions.push({
-      tag: "button",
-      type: "default",
-      size: "small",
-      text: { tag: "plain_text", content: "复制原文" },
-      value: { action: "pi_feishu_copy_markdown", copySourceId },
-    });
-  }
-  return actions;
-}
-
 export function formatToolSummary(name: string, args: any): string {
   if (!args || typeof args !== "object") return name;
   let target = "";
@@ -222,6 +208,9 @@ export function buildCardKitCardJson(input: {
       elements.push({
         tag: "collapsible_panel",
         expanded: false,
+        direction: "vertical",
+        vertical_spacing: "4px",
+        padding: "4px 8px 4px 8px",
         header: {
           title: {
             tag: "plain_text",
@@ -297,118 +286,6 @@ export function buildCardKitCardJson(input: {
       title: { tag: "plain_text", content: titleForStatus(input.status) },
     },
     body: { elements },
-  };
-}
-
-/**
- * 普通 interactive 消息卡片（非 CardKit 实体）：
- * - running: 标题「回复中」+ 正文 + [停止]
- * - done: 标题「回复」+ 最终正文
- * - stopped/failed: 标题 + 说明
- */
-export function buildReplyCard(input: {
-  key: string;
-  status: ReplyCardStatus;
-  note?: string;
-  body?: string;
-  progress?: string;
-  hasGitChanges?: boolean;
-  copySourceId?: string;
-  runId?: string;
-}) {
-  const running = input.status === "running";
-  const body = (input.body || "").trim();
-  const progress = (input.progress || "").trim();
-  const note = input.note ? normalizeNote(input.note) : undefined;
-  const elements: object[] = [];
-
-  if (running) {
-    if (progress) {
-      elements.push({
-        tag: "div",
-        text: { tag: "lark_md", content: progress },
-      });
-    }
-    if (body) {
-      if (progress) elements.push({ tag: "hr" });
-      elements.push({
-        tag: "div",
-        text: { tag: "lark_md", content: body },
-      });
-    } else if (!progress) {
-      elements.push({
-        tag: "div",
-        text: { tag: "lark_md", content: WAITING_TEXT },
-      });
-    }
-    // 1.0 interactive 仍可用 action 模块；同时附带 2.0 button 以兼容
-    elements.push({
-      tag: "action",
-      actions: [
-        {
-          tag: "button",
-          text: { tag: "plain_text", content: "停止" },
-          type: "danger",
-          value: { action: STOP_ACTION, key: input.key, runId: input.runId },
-        },
-      ],
-    });
-  } else if (input.status === "done") {
-    if (progress) {
-      elements.push({
-        tag: "div",
-        text: { tag: "lark_md", content: progress },
-      });
-      if (body) elements.push({ tag: "hr" });
-    }
-    elements.push({
-      tag: "div",
-      text: { tag: "lark_md", content: body || " " },
-    });
-    if (input.key) {
-      elements.push({
-        tag: "action",
-        actions: buildReplyCardQuickActionButtons(input.key, Boolean(input.hasGitChanges), input.copySourceId),
-      });
-    }
-  } else {
-    if (note) {
-      elements.push({
-        tag: "div",
-        text: { tag: "lark_md", content: note },
-      });
-    }
-    if (progress) {
-      elements.push({
-        tag: "div",
-        text: { tag: "lark_md", content: progress },
-      });
-    }
-    if (body) {
-      if (elements.length) elements.push({ tag: "hr" });
-      elements.push({
-        tag: "div",
-        text: { tag: "lark_md", content: body },
-      });
-    }
-    if (!elements.length) {
-      elements.push({
-        tag: "div",
-        text: { tag: "lark_md", content: " " },
-      });
-    }
-  }
-
-  return {
-    config: {
-      wide_screen_mode: true,
-      update_multi: true,
-    },
-    header: {
-      template: headerTemplate(input.status),
-      title: { tag: "plain_text", content: titleForStatus(input.status) },
-    },
-    elements,
   };
 }
 

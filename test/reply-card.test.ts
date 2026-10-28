@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   buildCardKitCardJson,
   buildQuickActionButtons,
-  buildReplyCard,
   buildStopButton,
   formatProgressSection,
   formatToolStepsMarkdown,
@@ -28,15 +27,15 @@ function headerTitle(card: any) {
   return card?.header?.title?.content;
 }
 
-test("running interactive card always has stop button", () => {
-  const card = buildReplyCard({ key: "k1", status: "running", body: "hi", runId: "r1" });
+test("running card always has stop button", () => {
+  const card = buildCardKitCardJson({ key: "k1", status: "running", body: "hi", runId: "r1" });
   assert.equal(headerTitle(card), "回复中");
   assert.equal(hasStopControl(card), true);
   assert.equal(JSON.stringify(card).includes("任务"), false);
 });
 
-test("done interactive card has no stop button", () => {
-  const card = buildReplyCard({ key: "k1", status: "done", body: "最终回复" });
+test("done card has no stop button", () => {
+  const card = buildCardKitCardJson({ key: "k1", status: "done", body: "最终回复" });
   assert.equal(headerTitle(card), "回复");
   assert.equal(hasStopControl(card), false);
   assert.match(JSON.stringify(card), /最终回复/);
@@ -242,20 +241,6 @@ test("CardKit and ReplyCard done cards contain quick action buttons", () => {
   assert.doesNotMatch(ckStr, /查看完整 Diff/);
   assert.doesNotMatch(ckStr, /运行项目测试/);
   assert.doesNotMatch(ckStr, /查看状态/);
-
-  const replyDone = buildReplyCard({
-    key: "p2p:user",
-    status: "done",
-    body: "完成回答",
-    hasGitChanges: false,
-    copySourceId: "copy-id-2",
-  });
-  const rpStr = JSON.stringify(replyDone);
-  assert.match(rpStr, /复制原文/);
-  assert.match(rpStr, /pi_feishu_copy_markdown/);
-  assert.doesNotMatch(rpStr, /查看完整 Diff/);
-  assert.doesNotMatch(rpStr, /运行项目测试/);
-  assert.doesNotMatch(rpStr, /查看状态/);
 });
 
 test("ReplyCard done records copy source on transport", async () => {

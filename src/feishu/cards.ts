@@ -68,14 +68,13 @@ export function buildModelCard(key: string, models: RuntimeModel[], currentModel
     });
   }
 
-  return {
-    config: sharedCardConfig(),
-    header: {
+  return createCard2(
+    {
       template: "blue",
       title: { tag: "plain_text", content: "选择 Pi 模型" },
     },
     elements,
-  };
+  );
 }
 
 export function buildThinkingCard(key: string, currentModel: RuntimeModel | undefined, status: ThinkingStatus) {
@@ -116,14 +115,13 @@ export function buildThinkingCard(key: string, currentModel: RuntimeModel | unde
     }
   }
 
-  return {
-    config: sharedCardConfig(),
-    header: {
+  return createCard2(
+    {
       template: "purple",
       title: { tag: "plain_text", content: "调整思考强度" },
     },
     elements,
-  };
+  );
 }
 
 export function buildResumeCard(data: ResumeSessionPage) {
@@ -209,14 +207,13 @@ export function buildResumeCard(data: ResumeSessionPage) {
     ],
   });
 
-  return {
-    config: sharedCardConfig(),
-    header: {
+  return createCard2(
+    {
       template: "turquoise",
       title: { tag: "plain_text", content: "切换 Pi 历史会话" },
     },
     elements,
-  };
+  );
 }
 
 export function parseModelActionValue(value: unknown): { key: string; provider: string; modelId: string } | undefined {
@@ -286,6 +283,23 @@ function sharedCardConfig() {
     wide_screen_mode: true,
     update_multi: true,
   };
+}
+
+function createCard2(header: any, elements: any[]) {
+  const card: any = {
+    schema: "2.0",
+    config: sharedCardConfig(),
+    header,
+    body: { elements },
+  };
+  Object.defineProperty(card, "elements", {
+    get() {
+      return this.body.elements;
+    },
+    enumerable: false,
+    configurable: true,
+  });
+  return card;
 }
 
 function listSubdirectories(dir: string): string[] {
@@ -452,14 +466,13 @@ export function buildWorkspaceCard(
     }
   }
 
-  return {
-    config: sharedCardConfig(),
-    header: {
+  return createCard2(
+    {
       template: "turquoise",
       title: { tag: "plain_text", content: "选择工作区目录" },
     },
     elements,
-  };
+  );
 }
 
 export function parseWorkspaceSelectActionValue(value: unknown): { key: string; path: string; page: number } | undefined {

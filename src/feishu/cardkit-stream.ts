@@ -62,9 +62,9 @@ export class CardKitStream {
     this.domain = domain;
     this.replyToMessageId = replyToMessageId;
     this.fallbackReply = fallbackReply;
-    this.printFrequencyMs = Math.max(20, options?.printFrequencyMs ?? 50);
+    this.printFrequencyMs = Math.max(10, options?.printFrequencyMs ?? 25);
     this.printStep = Math.max(1, options?.printStep ?? 1);
-    this.pushIntervalMs = Math.max(50, options?.pushIntervalMs ?? 120);
+    this.pushIntervalMs = Math.max(40, options?.pushIntervalMs ?? 80);
     this.conversationKey = options?.conversationKey;
     this.runId = options?.runId;
     this.onOutboundMessageId = options?.onOutboundMessageId;
@@ -283,7 +283,7 @@ export class CardKitStream {
           settings: JSON.stringify({
             config: {
               streaming_mode: false,
-              summary: { content: (this.fullText.slice(0, 50) || "Pi").replace(/\s+/g, " ") },
+              summary: { content: cleanSummary(this.fullText) },
             },
           }),
           sequence: ++this.sequence,
@@ -347,4 +347,17 @@ export class CardKitStream {
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function cleanSummary(text: string): string {
+  if (!text) return "Pi";
+  const stripped = text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^#+\s+/gm, "")
+    .replace(/^>\s+/gm, "")
+    .replace(/[*_~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return (stripped.slice(0, 60) || "Pi").trim();
 }
