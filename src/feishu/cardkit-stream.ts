@@ -21,6 +21,10 @@ export type CardKitStreamOptions = {
   conversationKey?: string;
   /** 本轮 runId，用于停止按钮回调 */
   runId?: string;
+  /** 模型名称，展示于 Header Tag */
+  modelName?: string;
+  /** 工作区路径，展示于 Header Subtitle / IDE 打开按钮 */
+  workspace?: string;
   /** 记录本 bot 发出的消息 id（供 groupAlsoOnReply） */
   onOutboundMessageId?: (messageId: string) => void;
 };
@@ -42,6 +46,8 @@ export class CardKitStream {
   private readonly pushIntervalMs: number;
   private readonly conversationKey?: string;
   private readonly runId?: string;
+  private readonly modelName?: string;
+  private readonly workspace?: string;
   private readonly onOutboundMessageId?: (messageId: string) => void;
   private readonly appId: string;
   private readonly appSecret: string;
@@ -67,6 +73,8 @@ export class CardKitStream {
     this.pushIntervalMs = Math.max(40, options?.pushIntervalMs ?? 80);
     this.conversationKey = options?.conversationKey;
     this.runId = options?.runId;
+    this.modelName = options?.modelName;
+    this.workspace = options?.workspace;
     this.onOutboundMessageId = options?.onOutboundMessageId;
   }
 
@@ -102,6 +110,8 @@ export class CardKitStream {
         streaming: true,
         printFrequencyMs: this.printFrequencyMs,
         printStep: this.printStep,
+        modelName: this.modelName,
+        workspace: this.workspace,
       });
 
       const cr = await fetch(`${this.baseUrl()}/open-apis/cardkit/v1/cards`, {
@@ -250,6 +260,7 @@ export class CardKitStream {
     finalStatus: "done" | "stopped" | "failed" = "done",
     hasGitChanges = false,
     copySourceId?: string,
+    meta?: { elapsedMs?: number; gitDiffCount?: number; stepCount?: number },
   ): Promise<void> {
     if (this.closed) return;
     this.closed = true;
@@ -307,6 +318,11 @@ export class CardKitStream {
         streaming: false,
         hasGitChanges,
         copySourceId: finalStatus === "done" ? copySourceId : undefined,
+        modelName: this.modelName,
+        workspace: this.workspace,
+        elapsedMs: meta?.elapsedMs,
+        gitDiffCount: meta?.gitDiffCount,
+        stepCount: meta?.stepCount,
       });
       const updateRes = await fetch(`${this.baseUrl()}/open-apis/cardkit/v1/cards/${this.cardId}`, {
         method: "PUT",

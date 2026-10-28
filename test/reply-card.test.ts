@@ -134,9 +134,9 @@ test("formatToolStepsMarkdown renders completed and failed steps without running
   assert.doesNotMatch(md, /已收拢/);
   // running 中的步骤不渲染，避免状态变更篡改中间行
   assert.doesNotMatch(md, /\[执行中\]/);
-  assert.match(md, /\[失败\] `edit: src\/index\.ts` \(80ms\)/);
-  assert.match(md, /\[完成\] `bash: npm test` \(1\.2s\)/);
-  assert.match(md, /\[完成\] `bash: git status` \(45ms\)/);
+  assert.match(md, /❌ `edit: src\/index\.ts` \(80ms\)/);
+  assert.match(md, /✅ `bash: npm test` \(1\.2s\)/);
+  assert.match(md, /✅ `bash: git status` \(45ms\)/);
 });
 
 test("formatProgressSection builds static header and completed tool block without mutable status", () => {
@@ -147,7 +147,7 @@ test("formatProgressSection builds static header and completed tool block withou
   assert.doesNotMatch(section, /\*\*当前状态\*\*/);
   assert.doesNotMatch(section, /\(共 \d+ 步\)/);
   assert.match(section, /> \*\*执行步骤\*\*/);
-  assert.match(section, /> - \[完成\] `bash: git status` \(50ms\)/);
+  assert.match(section, /> - ✅ `bash: git status` \(50ms\)/);
 });
 
 test("ReplyCard captures tool execution lifecycle and updates status", async () => {
@@ -223,6 +223,42 @@ test("buildQuickActionButtons only renders copy button when copySourceId is prov
 
   const withoutCopy = buildQuickActionButtons("key-1", true);
   assert.equal(withoutCopy.length, 0);
+
+  const withWorkspace = buildQuickActionButtons("key-1", true, "copy-1", "/Users/fxj/m/my-project") as any[];
+  assert.equal(withWorkspace.length, 2);
+  const ideBtn = withWorkspace[1];
+  assert.equal(ideBtn.text.content, "在 IDE 中打开");
+  assert.equal(ideBtn.behaviors[0].type, "open_url");
+  assert.equal(ideBtn.behaviors[0].pc_url, "vscode://file/Users/fxj/m/my-project");
+});
+
+test("CardKit Header 2.0 metadata, tags, and card_link", () => {
+  const card = buildCardKitCardJson({
+    key: "p2p:user",
+    status: "done",
+    body: "回答完成",
+    modelName: "deepseek/deepseek-chat",
+    workspace: "/Users/fxj/m/project",
+    elapsedMs: 3400,
+    stepCount: 5,
+    gitDiffCount: 2,
+  }) as any;
+
+  assert.equal(card.schema, "2.0");
+  assert.equal(card.card_link.pc_url, "vscode://file/Users/fxj/m/project");
+  assert.equal(card.header.title.content, "回复");
+  assert.match(card.header.subtitle.content, /耗时 3\.4s/);
+  assert.match(card.header.subtitle.content, /工作区:/);
+
+  const tags = card.header.text_tag_list;
+  assert.ok(Array.isArray(tags));
+  assert.equal(tags.length, 3); // 最多 3 个
+  assert.equal(tags[0].text.content, "deepseek-chat");
+  assert.equal(tags[0].color, "wathet");
+  assert.equal(tags[1].text.content, "3.4s");
+  assert.equal(tags[1].color, "green");
+  assert.equal(tags[2].text.content, "2 文件变更");
+  assert.equal(tags[2].color, "orange");
 });
 
 test("CardKit and ReplyCard done cards contain quick action buttons", () => {

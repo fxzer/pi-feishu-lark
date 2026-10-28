@@ -71,6 +71,8 @@ export function createCardActionHandler(
         const cfg = loadConfig();
         const useStreaming = cfg?.streamingReply !== false;
         const workspace = conversations.getWorkspace(quickPrompt.key);
+        const model = await conversations.getSelectedModel(quickPrompt.key);
+        const modelName = model ? `${model.provider}/${model.id}` : undefined;
         const replyCard = new ReplyCard(
           quickPrompt.key,
           action.messageId,
@@ -82,6 +84,7 @@ export function createCardActionHandler(
             pushIntervalMs: cfg?.streamPushIntervalMs,
           },
           workspace,
+          modelName,
         );
         await replyCard.start();
 

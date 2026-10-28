@@ -138,6 +138,7 @@ export class FeishuMessageHandler {
       // 单卡：全程 header；流式参数来自 config/env
       const useStreaming = cfg?.streamingReply !== false;
       const workspace = this.conversations.getWorkspace(key);
+      const modelName = model ? `${model.provider}/${model.id}` : undefined;
       const card = new ReplyCard(
         key,
         msg.messageId,
@@ -149,6 +150,7 @@ export class FeishuMessageHandler {
           pushIntervalMs: cfg?.streamPushIntervalMs,
         },
         workspace,
+        modelName,
       );
       await card.start();
 

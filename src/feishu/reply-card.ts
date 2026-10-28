@@ -103,6 +103,8 @@ export class ReplyCard implements ReplyCardSink {
   private readonly replyToMessageId: string;
   private readonly transport: ReplyCardTransport;
   private readonly workspace?: string;
+  private readonly modelName?: string;
+  private readonly startTime = Date.now();
   private tools: ToolStep[] = [];
   private currentAction = "正在思考…";
   private lastProgressPush = 0;
@@ -115,12 +117,14 @@ export class ReplyCard implements ReplyCardSink {
     transport: ReplyCardTransport,
     streamOptions?: ReplyCardStreamOptions,
     workspace?: string,
+    modelName?: string,
   ) {
     this.key = key;
     this.replyToMessageId = replyToMessageId;
     this.transport = transport;
     this.streamOpts = resolveStreamOptions(streamOptions);
     this.workspace = workspace;
+    this.modelName = modelName;
   }
 
   get messageId() {
@@ -151,6 +155,9 @@ export class ReplyCard implements ReplyCardSink {
               progress: this.tools.length > 0 ? formatProgressSection(this.tools) : undefined,
               copySourceId: this.runId,
               body: text,
+              modelName: this.modelName,
+              workspace: this.workspace,
+              elapsedMs: Date.now() - this.startTime,
             }),
           );
           this.fallbackCardId = id;
@@ -161,6 +168,8 @@ export class ReplyCard implements ReplyCardSink {
           pushIntervalMs: this.streamOpts.pushIntervalMs,
           conversationKey: this.key,
           runId: this.runId,
+          modelName: this.modelName,
+          workspace: this.workspace,
           onOutboundMessageId: (id) => this.transport.rememberOutboundMessageId?.(id),
         },
       );
@@ -184,6 +193,8 @@ export class ReplyCard implements ReplyCardSink {
         status: "running",
         progress: initialProgress,
         body: "",
+        modelName: this.modelName,
+        workspace: this.workspace,
       }),
     );
     debugLog("feishu.reply_card.started_static", {
@@ -295,6 +306,8 @@ export class ReplyCard implements ReplyCardSink {
             status: "running",
             progress,
             body: this.body,
+            modelName: this.modelName,
+            workspace: this.workspace,
           }),
         );
       } catch (e) {
@@ -363,14 +376,22 @@ export class ReplyCard implements ReplyCardSink {
       this.transport.rememberMarkdownCopySource?.(copySourceId, this.body);
     }
 
+    const elapsedMs = Math.max(1, Date.now() - this.startTime);
+    const stepCount = this.tools.filter((t) => t.status !== "running").length;
+
     if (this.cardkit) {
       this.cardkit.setProgress(finalProgress);
-      // 同一张 CardKit 卡上关闭流式并更新 header（回复/已停止/出错了），并附带快捷操作栏
+      // 同一张 CardKit 卡上关闭流式并更新 header（回复/已停止/出错了），并附带快捷操作栏与元信息
       await this.cardkit.close(
         this.body,
         status === "failed" ? "failed" : status === "stopped" ? "stopped" : "done",
         hasGitChanges,
         copySourceId,
+        {
+          elapsedMs,
+          gitDiffCount: gitDiff.count,
+          stepCount,
+        },
       );
       return;
     }
@@ -389,6 +410,11 @@ export class ReplyCard implements ReplyCardSink {
             hasGitChanges,
             copySourceId,
             body: this.body,
+            modelName: this.modelName,
+            workspace: this.workspace,
+            elapsedMs,
+            gitDiffCount: gitDiff.count,
+            stepCount,
           }),
         );
       } catch (error) {

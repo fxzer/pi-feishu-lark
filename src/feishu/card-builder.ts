@@ -1,5 +1,6 @@
 /** 单卡 UI 纯函数：构建飞书 interactive / CardKit 卡片 JSON（无 IO） */
 import { execFileSync } from "node:child_process";
+import { homedir } from "node:os";
 
 export type ReplyCardStatus = "running" | "done" | "failed" | "stopped" | "inactive";
 
@@ -26,6 +27,16 @@ export function parseQuickPromptActionValue(value: unknown): { key: string; prom
   return { key: raw.key, prompt: raw.prompt };
 }
 
+function parseGitStatus(statusCol: string): string {
+  const s = statusCol.trim();
+  if (s === "??" || s === "A" || s.startsWith("A")) return "新增";
+  if (s === "D" || s.includes("D")) return "删除";
+  if (s === "R" || s.includes("R")) return "重命名";
+  if (s === "U" || s.includes("U")) return "冲突";
+  if (s === "M" || s.includes("M")) return "修改";
+  return s || "变更";
+}
+
 export function getGitDiffSummary(cwd?: string): { summary?: string; count: number } {
   if (!cwd) return { count: 0 };
   try {
@@ -40,21 +51,39 @@ export function getGitDiffSummary(cwd?: string): { summary?: string; count: numb
     const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
     if (!lines.length) return { count: 0 };
 
-    const maxFiles = 6;
+    const maxFiles = 8;
     const displayLines = lines.slice(0, maxFiles);
-    const formatted = displayLines.map((line) => `> - \`${line}\``);
+    const rows = displayLines.map((line) => {
+      const statusCode = line.slice(0, 2);
+      const filePath = line.slice(2).trim().replace(/\|/g, "\\|");
+      const statusLabel = parseGitStatus(statusCode);
+      return `> | ${statusLabel} | \`${filePath}\` |`;
+    });
+
+    const tableLines = [
+      `> **代码变更** (共 ${lines.length} 个文件)`,
+      ">",
+      "> | 状态 | 文件路径 |",
+      "> | :---: | :--- |",
+      ...rows,
+    ];
     if (lines.length > maxFiles) {
-      formatted.push(`> ... 其余 ${lines.length - maxFiles} 个改动文件已折叠`);
+      tableLines.push(`> *... 其余 ${lines.length - maxFiles} 个改动文件已折叠*`);
     }
 
-    const summary = `> **代码变更** (共 ${lines.length} 个文件)\n${formatted.join("\n")}`;
+    const summary = tableLines.join("\n");
     return { summary, count: lines.length };
   } catch {
     return { count: 0 };
   }
 }
 
-export function buildQuickActionButtons(key: string, hasGitChanges = false, copySourceId?: string): object[] {
+export function buildQuickActionButtons(
+  key: string,
+  hasGitChanges = false,
+  copySourceId?: string,
+  workspace?: string,
+): object[] {
   const buttons: object[] = [];
   if (copySourceId) {
     buttons.push({
@@ -67,6 +96,23 @@ export function buildQuickActionButtons(key: string, hasGitChanges = false, copy
         {
           type: "callback",
           value: { action: "pi_feishu_copy_markdown", copySourceId },
+        },
+      ],
+    });
+  }
+  if (workspace && workspace.trim()) {
+    const ws = workspace.trim();
+    const ideUrl = `vscode://file${ws.startsWith("/") ? "" : "/"}${ws}`;
+    buttons.push({
+      tag: "button",
+      type: "default",
+      size: "small",
+      text: { tag: "plain_text", content: "在 IDE 中打开" },
+      behaviors: [
+        {
+          type: "open_url",
+          default_url: ideUrl,
+          pc_url: ideUrl,
         },
       ],
     });
@@ -111,7 +157,7 @@ export function formatToolStepsMarkdown(steps: ToolStep[], _isRunning = true): s
   for (const step of steps) {
     // 纯递增流：仅输出已结束/失败的步骤；执行中的步骤不输出，避免状态突变篡改前缀行
     if (step.status === "running") continue;
-    const statusLabel = step.status === "error" ? "[失败]" : "[完成]";
+    const statusLabel = step.status === "error" ? "❌" : "✅";
     const dur = step.durationMs != null ? ` (${formatDuration(step.durationMs)})` : "";
     lines.push(`> - ${statusLabel} \`${step.summary}\`${dur}`);
   }
@@ -148,6 +194,99 @@ export function buildStopButton(key: string, runId?: string) {
   };
 }
 
+function shortWorkspace(ws?: string): string {
+  if (!ws) return "";
+  const home = homedir();
+  if (home && ws.startsWith(home)) {
+    return `~${ws.slice(home.length)}`;
+  }
+  return ws;
+}
+
+function buildHeaderSubtitle(input: {
+  status: ReplyCardStatus;
+  workspace?: string;
+  elapsedMs?: number;
+}): string | undefined {
+  const ws = input.workspace ? shortWorkspace(input.workspace) : "";
+  const dur = input.elapsedMs != null ? `耗时 ${formatDuration(input.elapsedMs)}` : "";
+
+  if (input.status === "running") {
+    return ws ? `工作区: ${ws}` : undefined;
+  }
+  if (dur && ws) {
+    return `${dur} · 工作区: ${ws}`;
+  }
+  if (dur) return dur;
+  if (ws) return `工作区: ${ws}`;
+  return undefined;
+}
+
+function buildHeaderTextTags(input: {
+  status: ReplyCardStatus;
+  modelName?: string;
+  elapsedMs?: number;
+  stepCount?: number;
+  gitDiffCount?: number;
+}): object[] {
+  const tags: object[] = [];
+
+  // 1. 模型 Tag
+  if (input.modelName) {
+    const raw = input.modelName.trim();
+    const displayModel = raw.includes("/") ? raw.split("/").slice(1).join("/") : raw;
+    tags.push({
+      tag: "text_tag",
+      text: { tag: "plain_text", content: displayModel },
+      color: "wathet",
+    });
+  }
+
+  // 2. 状态/耗时 Tag
+  if (input.status === "running") {
+    tags.push({
+      tag: "text_tag",
+      text: { tag: "plain_text", content: "进行中" },
+      color: "blue",
+    });
+  } else if (input.status === "done" && input.elapsedMs != null) {
+    tags.push({
+      tag: "text_tag",
+      text: { tag: "plain_text", content: formatDuration(input.elapsedMs) },
+      color: "green",
+    });
+  } else if (input.status === "failed") {
+    tags.push({
+      tag: "text_tag",
+      text: { tag: "plain_text", content: "失败" },
+      color: "red",
+    });
+  } else if (input.status === "stopped") {
+    tags.push({
+      tag: "text_tag",
+      text: { tag: "plain_text", content: "已停止" },
+      color: "grey",
+    });
+  }
+
+  // 3. 统计 Tag (改动文件数 或 步骤数，上限 3 个 Tag)
+  if (input.gitDiffCount != null && input.gitDiffCount > 0) {
+    tags.push({
+      tag: "text_tag",
+      text: { tag: "plain_text", content: `${input.gitDiffCount} 文件变更` },
+      color: "orange",
+    });
+  } else if (input.stepCount != null && input.stepCount > 0) {
+    tags.push({
+      tag: "text_tag",
+      text: { tag: "plain_text", content: `${input.stepCount} 步调用` },
+      color: "turquoise",
+    });
+  }
+
+  return tags.slice(0, 3);
+}
+
 /**
  * CardKit schema 2.0 卡片（流式/全量更新共用）。
  * running 必须带停止按钮，避免只有 markdown 无法中止。
@@ -164,12 +303,21 @@ export function buildCardKitCardJson(input: {
   streaming?: boolean;
   printFrequencyMs?: number;
   printStep?: number;
+  modelName?: string;
+  workspace?: string;
+  elapsedMs?: number;
+  stepCount?: number;
+  gitDiffCount?: number;
 }) {
   const running = input.status === "running";
   const body = (input.body || "").trim();
   const progress = (input.progress || "").trim();
   const note = input.note ? normalizeNote(input.note) : undefined;
   const elements: object[] = [];
+
+  const stepCount = input.stepCount ?? (progress.match(/^> - (?:✅|❌|\[(?:完成|失败)\])/gm) || []).length;
+  const diffMatch = progress.match(/代码变更 \(共 (\d+) 个文件\)/);
+  const gitDiffCount = input.gitDiffCount ?? (diffMatch ? Number.parseInt(diffMatch[1], 10) : 0);
 
   let fullContent = "";
   if (progress && body) {
@@ -194,8 +342,6 @@ export function buildCardKitCardJson(input: {
   } else if (input.status === "done") {
     // 方案 1：完成态将步骤与代码变更放入原生折叠面板（默认收起），保证正文极致清爽
     if (progress) {
-      const stepCount = (progress.match(/^> - \[(?:完成|失败)\]/gm) || []).length;
-      const diffMatch = progress.match(/代码变更 \(共 (\d+) 个文件\)/);
       let titleText = "查看执行步骤与变更";
       if (stepCount > 0 && diffMatch) {
         titleText = `查看执行过程与变更 (${stepCount} 步 / ${diffMatch[1]} 文件)`;
@@ -241,7 +387,12 @@ export function buildCardKitCardJson(input: {
       element_id: "content",
     });
     if (input.key) {
-      const buttons = buildQuickActionButtons(input.key, Boolean(input.hasGitChanges), input.copySourceId);
+      const buttons = buildQuickActionButtons(
+        input.key,
+        Boolean(input.hasGitChanges),
+        input.copySourceId,
+        input.workspace,
+      );
       if (buttons.length > 0) {
         elements.push({
           tag: "column_set",
@@ -278,15 +429,48 @@ export function buildCardKitCardJson(input: {
     };
   }
 
-  return {
+  const header: Record<string, unknown> = {
+    template: headerTemplate(input.status),
+    title: { tag: "plain_text", content: titleForStatus(input.status) },
+  };
+
+  const subtitleContent = buildHeaderSubtitle({
+    status: input.status,
+    workspace: input.workspace,
+    elapsedMs: input.elapsedMs,
+  });
+  if (subtitleContent) {
+    header.subtitle = { tag: "plain_text", content: subtitleContent };
+  }
+
+  const tags = buildHeaderTextTags({
+    status: input.status,
+    modelName: input.modelName,
+    elapsedMs: input.elapsedMs,
+    stepCount,
+    gitDiffCount,
+  });
+  if (tags.length > 0) {
+    header.text_tag_list = tags;
+  }
+
+  const cardLink = input.workspace?.trim()
+    ? {
+        pc_url: `vscode://file${input.workspace.trim().startsWith("/") ? "" : "/"}${input.workspace.trim()}`,
+      }
+    : undefined;
+
+  const card: Record<string, unknown> = {
     schema: "2.0",
     config,
-    header: {
-      template: headerTemplate(input.status),
-      title: { tag: "plain_text", content: titleForStatus(input.status) },
-    },
+    header,
     body: { elements },
   };
+  if (cardLink) {
+    card.card_link = cardLink;
+  }
+
+  return card;
 }
 
 export function parseStopTaskActionValue(value: unknown): { key: string; runId?: string } | undefined {
