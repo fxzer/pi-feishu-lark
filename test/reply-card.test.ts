@@ -384,6 +384,12 @@ test("CardKit buildCardKitCardJson preserves append-only prefix when combining p
   assert.ok(content4.startsWith(content3), "Body continuation must start with previous body prefix");
 
   const cardDone = buildCardKitCardJson({ status: "done", progress: p2, body: "第一段回答，第二段回答" });
-  const contentDone = (cardDone.body.elements[0] as any).content as string;
-  assert.equal(contentDone, content4, "Done card must preserve exact content without wiping steps");
+  const panel = cardDone.body.elements[0] as any;
+  assert.equal(panel.tag, "collapsible_panel");
+  assert.equal(panel.expanded, false);
+  assert.match(panel.header.title.content, /查看执行过程 \(共 2 步\)/);
+  assert.equal(panel.elements[0].content, p2);
+
+  const contentDone = (cardDone.body.elements[1] as any).content as string;
+  assert.equal(contentDone, "第一段回答，第二段回答", "Done card presents concise body outside collapsible panel");
 });

@@ -206,9 +206,49 @@ export function buildCardKitCardJson(input: {
       elements.push(buildStopButton(input.key, input.runId));
     }
   } else if (input.status === "done") {
+    // 方案 1：完成态将步骤与代码变更放入原生折叠面板（默认收起），保证正文极致清爽
+    if (progress) {
+      const stepCount = (progress.match(/^> - \[(?:完成|失败)\]/gm) || []).length;
+      const diffMatch = progress.match(/代码变更 \(共 (\d+) 个文件\)/);
+      let titleText = "查看执行步骤与变更";
+      if (stepCount > 0 && diffMatch) {
+        titleText = `查看执行过程与变更 (${stepCount} 步 / ${diffMatch[1]} 文件)`;
+      } else if (stepCount > 0) {
+        titleText = `查看执行过程 (共 ${stepCount} 步)`;
+      } else if (diffMatch) {
+        titleText = `查看代码变更 (共 ${diffMatch[1]} 文件)`;
+      }
+
+      elements.push({
+        tag: "collapsible_panel",
+        expanded: false,
+        header: {
+          title: {
+            tag: "plain_text",
+            content: titleText,
+          },
+          icon: {
+            tag: "standard_icon",
+            token: "down-round_outlined",
+          },
+          icon_position: "follow_text",
+        },
+        border: {
+          color: "grey",
+          corner_radius: "5px",
+        },
+        elements: [
+          {
+            tag: "markdown",
+            content: progress,
+          },
+        ],
+      });
+    }
+
     elements.push({
       tag: "markdown",
-      content: fullContent,
+      content: body || " ",
       element_id: "content",
     });
     if (input.key) {
