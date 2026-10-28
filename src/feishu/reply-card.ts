@@ -129,7 +129,7 @@ export class ReplyCard implements ReplyCardSink {
 
   async start() {
     const cfg = loadConfig();
-    const initialProgress = formatProgressSection(this.currentAction, this.tools, true);
+    const initialProgress = formatProgressSection(this.tools);
 
     if (this.streamOpts.enabled && cfg?.appId && cfg?.appSecret) {
       this.cardkit = new CardKitStream(
@@ -148,7 +148,7 @@ export class ReplyCard implements ReplyCardSink {
               key: this.key,
               runId: this.runId,
               status: "done",
-              progress: this.tools.length > 0 ? formatProgressSection(undefined, this.tools, false) : undefined,
+              progress: this.tools.length > 0 ? formatProgressSection(this.tools) : undefined,
               copySourceId: this.runId,
               body: text,
             }),
@@ -280,7 +280,7 @@ export class ReplyCard implements ReplyCardSink {
   }
 
   private async flushProgress() {
-    const progress = formatProgressSection(this.currentAction, this.tools, true);
+    const progress = formatProgressSection(this.tools);
     if (this.cardkit) {
       this.cardkit.setProgress(progress);
       return;
@@ -346,10 +346,11 @@ export class ReplyCard implements ReplyCardSink {
       this.progressTimer = null;
     }
 
-    // 最终总结：有工具步骤时收拢展示执行过程；有代码变更时附加代码变更面板
+    // 最终总结：有工具步骤时展示执行过程；有代码变更时附加代码变更面板
     const progressParts: string[] = [];
     if (this.tools.length > 0) {
-      progressParts.push(formatProgressSection(undefined, this.tools, false));
+      const toolSec = formatProgressSection(this.tools);
+      if (toolSec) progressParts.push(toolSec);
     }
     const gitDiff = status === "done" ? getGitDiffSummary(this.workspace) : { count: 0 };
     if (gitDiff.summary) {

@@ -120,7 +120,7 @@ test("formatToolSummary formats bash commands and file paths with truncation", (
   assert.ok(truncated.endsWith("…"));
 });
 
-test("formatToolStepsMarkdown renders tool status and folds if more than 5 steps", () => {
+test("formatToolStepsMarkdown renders completed and failed steps without running steps or folding", () => {
   const steps: ToolStep[] = [
     { id: "1", name: "bash", summary: "bash: git status", status: "done", startTime: 100, durationMs: 45 },
     { id: "2", name: "read_file", summary: "read_file: src/index.ts", status: "done", startTime: 200, durationMs: 120 },
@@ -130,25 +130,24 @@ test("formatToolStepsMarkdown renders tool status and folds if more than 5 steps
     { id: "6", name: "bash", summary: "bash: git diff", status: "running", startTime: 600 },
   ];
 
-  const runningMd = formatToolStepsMarkdown(steps, true);
-  assert.match(runningMd, /已收拢前 1 个步骤/);
-  assert.match(runningMd, /\[执行中\] `bash: git diff`/);
-  assert.match(runningMd, /\[失败\] `edit: src\/index\.ts` \(80ms\)/);
-  assert.match(runningMd, /\[完成\] `bash: npm test` \(1\.2s\)/);
-
-  const doneMd = formatToolStepsMarkdown(steps, false);
-  // done 时全量展示全部 6 步
-  assert.doesNotMatch(doneMd, /已收拢/);
-  assert.match(doneMd, /\[完成\] `bash: git status` \(45ms\)/);
+  const md = formatToolStepsMarkdown(steps);
+  // 纯递增流：不收拢折叠，确保首行永久不变
+  assert.doesNotMatch(md, /已收拢/);
+  // running 中的步骤不渲染，避免状态变更篡改中间行
+  assert.doesNotMatch(md, /\[执行中\]/);
+  assert.match(md, /\[失败\] `edit: src\/index\.ts` \(80ms\)/);
+  assert.match(md, /\[完成\] `bash: npm test` \(1\.2s\)/);
+  assert.match(md, /\[完成\] `bash: git status` \(45ms\)/);
 });
 
-test("formatProgressSection builds action header and tool block", () => {
+test("formatProgressSection builds static header and completed tool block without mutable status", () => {
   const steps: ToolStep[] = [
     { id: "1", name: "bash", summary: "bash: git status", status: "done", startTime: 100, durationMs: 50 },
   ];
   const section = formatProgressSection("正在执行 bash: npm test", steps, true);
-  assert.match(section, /\*\*当前状态\*\*：正在执行 bash: npm test/);
-  assert.match(section, /> \*\*执行步骤\*\* \(共 1 步\)/);
+  assert.doesNotMatch(section, /\*\*当前状态\*\*/);
+  assert.doesNotMatch(section, /\(共 \d+ 步\)/);
+  assert.match(section, /> \*\*执行步骤\*\*/);
   assert.match(section, /> - \[完成\] `bash: git status` \(50ms\)/);
 });
 
@@ -199,7 +198,7 @@ test("ReplyCard captures tool execution lifecycle and updates status", async () 
   assert.ok(updatedCards.length >= 1);
   const finalCard = updatedCards[updatedCards.length - 1];
   const jsonStr = JSON.stringify(finalCard);
-  assert.match(jsonStr, /执行过程/);
+  assert.match(jsonStr, /执行步骤/);
   assert.match(jsonStr, /npm test/);
   assert.match(jsonStr, /测试全部通过！/);
 });
@@ -359,4 +358,32 @@ test("wrapCardActionCallbackResult preserves toast and wraps cards", () => {
   // Normal Card
   const cardRes = wrapCardActionCallbackResult({ header: { title: "hi" } });
   assert.deepEqual(cardRes, { card: { type: "raw", data: { header: { title: "hi" } } } });
+});
+
+test("CardKit buildCardKitCardJson preserves append-only prefix when combining progress and body", () => {
+  const steps: ToolStep[] = [
+    { id: "1", name: "bash", summary: "bash: git status", status: "done", startTime: 100, durationMs: 45 },
+    { id: "2", name: "read_file", summary: "read_file: src/index.ts", status: "done", startTime: 200, durationMs: 120 },
+  ];
+
+  const p1 = formatProgressSection([steps[0]]);
+  const card1 = buildCardKitCardJson({ status: "running", progress: p1 });
+  const content1 = (card1.body.elements[0] as any).content as string;
+
+  const p2 = formatProgressSection(steps);
+  const card2 = buildCardKitCardJson({ status: "running", progress: p2 });
+  const content2 = (card2.body.elements[0] as any).content as string;
+  assert.ok(content2.startsWith(content1), "Step 2 must start with Step 1 prefix");
+
+  const card3 = buildCardKitCardJson({ status: "running", progress: p2, body: "第一段回答" });
+  const content3 = (card3.body.elements[0] as any).content as string;
+  assert.ok(content3.startsWith(content2), "Body streaming must start with tool steps prefix");
+
+  const card4 = buildCardKitCardJson({ status: "running", progress: p2, body: "第一段回答，第二段回答" });
+  const content4 = (card4.body.elements[0] as any).content as string;
+  assert.ok(content4.startsWith(content3), "Body continuation must start with previous body prefix");
+
+  const cardDone = buildCardKitCardJson({ status: "done", progress: p2, body: "第一段回答，第二段回答" });
+  const contentDone = (cardDone.body.elements[0] as any).content as string;
+  assert.equal(contentDone, content4, "Done card must preserve exact content without wiping steps");
 });

@@ -118,44 +118,31 @@ function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-export function formatToolStepsMarkdown(steps: ToolStep[], isRunning = true): string {
+export function formatToolStepsMarkdown(steps: ToolStep[], _isRunning = true): string {
   if (!steps || steps.length === 0) return "";
   const lines: string[] = [];
-  const total = steps.length;
-  const maxDisplay = 5;
-  const displaySteps = isRunning && total > maxDisplay
-    ? steps.slice(total - maxDisplay)
-    : steps;
 
-  if (isRunning && total > maxDisplay) {
-    lines.push(`> ... 已收拢前 ${total - maxDisplay} 个步骤`);
-  }
-
-  for (const step of displaySteps) {
-    const statusLabel = step.status === "running"
-      ? "[执行中]"
-      : step.status === "error"
-        ? "[失败]"
-        : "[完成]";
+  for (const step of steps) {
+    // 纯递增流：仅输出已结束/失败的步骤；执行中的步骤不输出，避免状态突变篡改前缀行
+    if (step.status === "running") continue;
+    const statusLabel = step.status === "error" ? "[失败]" : "[完成]";
     const dur = step.durationMs != null ? ` (${formatDuration(step.durationMs)})` : "";
     lines.push(`> - ${statusLabel} \`${step.summary}\`${dur}`);
   }
   return lines.join("\n");
 }
 
-export function formatProgressSection(currentAction?: string, steps?: ToolStep[], isRunning = true): string {
-  const parts: string[] = [];
-  if (isRunning && currentAction) {
-    parts.push(`**当前状态**：${currentAction}`);
-  }
-  if (steps && steps.length > 0) {
-    const header = isRunning
-      ? `> **执行步骤** (共 ${steps.length} 步)`
-      : `> **执行过程** (共 ${steps.length} 步)`;
-    const stepsMd = formatToolStepsMarkdown(steps, isRunning);
-    parts.push(`${header}\n${stepsMd}`);
-  }
-  return parts.join("\n\n");
+export function formatProgressSection(
+  arg1?: string | ToolStep[],
+  arg2?: ToolStep[],
+  _isRunning = true,
+): string {
+  const steps = Array.isArray(arg1) ? arg1 : arg2;
+  if (!steps || steps.length === 0) return "";
+  const stepsMd = formatToolStepsMarkdown(steps);
+  if (!stepsMd.trim()) return "";
+  // 头部永久固定，剔除 mutable 计步与当前状态，确保历史行永久不变（Append-Only）
+  return `> **执行步骤**\n${stepsMd}`;
 }
 
 /** CardKit JSON 2.0 停止按钮（直接放在 elements 里，不用 1.0 的 action 模块） */
@@ -199,12 +186,17 @@ export function buildCardKitCardJson(input: {
   const elements: object[] = [];
 
   let fullContent = "";
+  if (progress && body) {
+    fullContent = `${progress}\n\n---\n\n${body}`;
+  } else if (progress) {
+    fullContent = progress;
+  } else if (body) {
+    fullContent = body;
+  } else {
+    fullContent = running ? WAITING_TEXT : " ";
+  }
+
   if (running) {
-    if (body) {
-      fullContent = body;
-    } else {
-      fullContent = progress || WAITING_TEXT;
-    }
     elements.push({
       tag: "markdown",
       content: fullContent,
@@ -216,7 +208,7 @@ export function buildCardKitCardJson(input: {
   } else if (input.status === "done") {
     elements.push({
       tag: "markdown",
-      content: body || " ",
+      content: fullContent,
       element_id: "content",
     });
     if (input.key) {
@@ -236,9 +228,8 @@ export function buildCardKitCardJson(input: {
     }
   } else {
     const parts: string[] = [];
-    if (note) parts.push(note);
-    if (progress) parts.push(progress);
-    if (body) parts.push(body);
+    if (fullContent && fullContent !== " ") parts.push(fullContent);
+    if (note) parts.push(`*(${note})*`);
     elements.push({
       tag: "markdown",
       content: parts.join("\n\n") || " ",

@@ -129,6 +129,7 @@ export class CardKitStream {
       }
       const outboundId = s.data?.message_id;
       if (outboundId) this.onOutboundMessageId?.(outboundId);
+      this.lastSent = this.getCombinedText();
       debugLog("feishu.cardkit.started", {
         cardId: this.cardId,
         messageId: outboundId,
@@ -188,10 +189,14 @@ export class CardKitStream {
   }
 
   private getCombinedText(): string {
-    if (this.fullText.trim()) {
-      return this.fullText;
+    const p = this.progress.trim();
+    const b = this.fullText.trim();
+    if (p && b) {
+      return `${p}\n\n---\n\n${this.fullText}`;
     }
-    return this.progress.trim() || WAITING_TEXT;
+    if (p) return p;
+    if (b) return this.fullText;
+    return WAITING_TEXT;
   }
 
   private async tick() {
