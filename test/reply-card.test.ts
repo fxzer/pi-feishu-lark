@@ -10,11 +10,12 @@ import {
   getGitDiffSummary,
   parseQuickPromptActionValue,
   parseStopTaskActionValue,
+  OPEN_IDE_ACTION,
   QUICK_PROMPT_ACTION,
   STOP_ACTION,
   type ToolStep,
 } from "../src/feishu/card-builder.ts";
-import { createCardActionHandler } from "../src/feishu/card-actions.ts";
+import { createCardActionHandler, openWorkspaceInIde } from "../src/feishu/card-actions.ts";
 import { wrapCardActionCallbackResult } from "../src/feishu/transport.ts";
 import { ReplyCard } from "../src/feishu/reply-card.ts";
 
@@ -134,9 +135,9 @@ test("formatToolStepsMarkdown renders completed and failed steps without running
   assert.doesNotMatch(md, /已收拢/);
   // running 中的步骤不渲染，避免状态变更篡改中间行
   assert.doesNotMatch(md, /\[执行中\]/);
-  assert.match(md, /❌ `edit: src\/index\.ts` \(80ms\)/);
-  assert.match(md, /✅ `bash: npm test` \(1\.2s\)/);
-  assert.match(md, /✅ `bash: git status` \(45ms\)/);
+  assert.match(md, /> \| ❌ \| `edit: src\/index\.ts` \| 80ms \|/);
+  assert.match(md, /> \| ✅ \| `bash: npm test` \| 1\.2s \|/);
+  assert.match(md, /> \| ✅ \| `bash: git status` \| 45ms \|/);
 });
 
 test("formatProgressSection builds static header and completed tool block without mutable status", () => {
@@ -147,7 +148,9 @@ test("formatProgressSection builds static header and completed tool block withou
   assert.doesNotMatch(section, /\*\*当前状态\*\*/);
   assert.doesNotMatch(section, /\(共 \d+ 步\)/);
   assert.match(section, /> \*\*执行步骤\*\*/);
-  assert.match(section, /> - ✅ `bash: git status` \(50ms\)/);
+  assert.match(section, /> \| 状态 \| 执行操作 \| 耗时 \|/);
+  assert.match(section, /> \| :---: \| :--- \| :---: \|/);
+  assert.match(section, /> \| ✅ \| `bash: git status` \| 50ms \|/);
 });
 
 test("ReplyCard captures tool execution lifecycle and updates status", async () => {
@@ -228,11 +231,14 @@ test("buildQuickActionButtons only renders copy button when copySourceId is prov
   assert.equal(withWorkspace.length, 2);
   const ideBtn = withWorkspace[1];
   assert.equal(ideBtn.text.content, "在 IDE 中打开");
-  assert.equal(ideBtn.behaviors[0].type, "open_url");
-  assert.equal(ideBtn.behaviors[0].pc_url, "vscode://file/Users/fxj/m/my-project");
+  assert.equal(ideBtn.value.action, OPEN_IDE_ACTION);
+  assert.equal(ideBtn.value.workspace, "/Users/fxj/m/my-project");
+  assert.equal(ideBtn.behaviors[0].type, "callback");
+  assert.equal(ideBtn.behaviors[0].value.action, OPEN_IDE_ACTION);
+  assert.equal(ideBtn.behaviors[0].value.workspace, "/Users/fxj/m/my-project");
 });
 
-test("CardKit Header 2.0 metadata, tags, and card_link", () => {
+test("CardKit Header 2.0 metadata and tags", () => {
   const card = buildCardKitCardJson({
     key: "p2p:user",
     status: "done",
@@ -245,7 +251,6 @@ test("CardKit Header 2.0 metadata, tags, and card_link", () => {
   }) as any;
 
   assert.equal(card.schema, "2.0");
-  assert.equal(card.card_link.pc_url, "vscode://file/Users/fxj/m/project");
   assert.equal(card.header.title.content, "回复");
   assert.match(card.header.subtitle.content, /耗时 3\.4s/);
   assert.match(card.header.subtitle.content, /工作区:/);
@@ -348,25 +353,15 @@ test("createCardActionHandler returns toast without replying text message on cop
     },
   });
 
-  // 2. Expired copy action
-  const res2 = await handler({
+  // 3. Open IDE action
+  const res3 = await handler({
     messageId: "msg-1",
     chatId: "chat-1",
     operatorOpenId: "user-1",
-    value: { action: "pi_feishu_copy_markdown", copySourceId: "expired-id" },
+    value: { action: OPEN_IDE_ACTION, workspace: "/Users/fxj/m/test-proj" },
   });
-
   assert.equal(repliedTextCount, 0);
-  assert.deepEqual(res2, {
-    toast: {
-      type: "warning",
-      content: "MD 原文已过期，请重新生成卡片",
-      i18n: {
-        zh_cn: "MD 原文已过期，请重新生成卡片",
-        en_us: "Markdown source expired",
-      },
-    },
-  });
+  assert.ok(res3?.toast?.content.includes("VS Code"));
 });
 
 test("wrapCardActionCallbackResult preserves toast and wraps cards", () => {

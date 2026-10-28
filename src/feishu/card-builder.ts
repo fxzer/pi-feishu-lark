@@ -15,8 +15,17 @@ export type ToolStep = {
 
 export const STOP_ACTION = "pi_feishu_stop_task";
 export const QUICK_PROMPT_ACTION = "pi_feishu_quick_prompt";
+export const OPEN_IDE_ACTION = "pi_feishu_open_ide";
 const MAX_NOTE_CHARS = 96;
 export const WAITING_TEXT = "正在回复…";
+
+export function parseOpenIdeActionValue(value: unknown): { workspace: string } | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as any;
+  if (raw.action !== OPEN_IDE_ACTION) return undefined;
+  if (typeof raw.workspace !== "string" || !raw.workspace) return undefined;
+  return { workspace: raw.workspace };
+}
 
 export function parseQuickPromptActionValue(value: unknown): { key: string; prompt: string } | undefined {
   if (!value || typeof value !== "object") return undefined;
@@ -102,17 +111,16 @@ export function buildQuickActionButtons(
   }
   if (workspace && workspace.trim()) {
     const ws = workspace.trim();
-    const ideUrl = `vscode://file${ws.startsWith("/") ? "" : "/"}${ws}`;
     buttons.push({
       tag: "button",
       type: "default",
       size: "small",
       text: { tag: "plain_text", content: "在 IDE 中打开" },
+      value: { action: OPEN_IDE_ACTION, workspace: ws },
       behaviors: [
         {
-          type: "open_url",
-          default_url: ideUrl,
-          pc_url: ideUrl,
+          type: "callback",
+          value: { action: OPEN_IDE_ACTION, workspace: ws },
         },
       ],
     });
@@ -158,8 +166,9 @@ export function formatToolStepsMarkdown(steps: ToolStep[], _isRunning = true): s
     // 纯递增流：仅输出已结束/失败的步骤；执行中的步骤不输出，避免状态突变篡改前缀行
     if (step.status === "running") continue;
     const statusLabel = step.status === "error" ? "❌" : "✅";
-    const dur = step.durationMs != null ? ` (${formatDuration(step.durationMs)})` : "";
-    lines.push(`> - ${statusLabel} \`${step.summary}\`${dur}`);
+    const dur = step.durationMs != null ? formatDuration(step.durationMs) : "-";
+    const safeSummary = step.summary.replace(/\|/g, "\\|");
+    lines.push(`> | ${statusLabel} | \`${safeSummary}\` | ${dur} |`);
   }
   return lines.join("\n");
 }
@@ -174,7 +183,7 @@ export function formatProgressSection(
   const stepsMd = formatToolStepsMarkdown(steps);
   if (!stepsMd.trim()) return "";
   // 头部永久固定，剔除 mutable 计步与当前状态，确保历史行永久不变（Append-Only）
-  return `> **执行步骤**\n${stepsMd}`;
+  return `> **执行步骤**\n>\n> | 状态 | 执行操作 | 耗时 |\n> | :---: | :--- | :---: |\n${stepsMd}`;
 }
 
 /** CardKit JSON 2.0 停止按钮（直接放在 elements 里，不用 1.0 的 action 模块） */
@@ -194,7 +203,7 @@ export function buildStopButton(key: string, runId?: string) {
   };
 }
 
-function shortWorkspace(ws?: string): string {
+export function shortWorkspace(ws?: string): string {
   if (!ws) return "";
   const home = homedir();
   if (home && ws.startsWith(home)) {
@@ -315,7 +324,8 @@ export function buildCardKitCardJson(input: {
   const note = input.note ? normalizeNote(input.note) : undefined;
   const elements: object[] = [];
 
-  const stepCount = input.stepCount ?? (progress.match(/^> - (?:✅|❌|\[(?:完成|失败)\])/gm) || []).length;
+  const stepCount = input.stepCount
+    ?? ((progress.match(/^> \| (?:✅|❌)/gm) || progress.match(/^> - (?:✅|❌|\[(?:完成|失败)\])/gm)) || []).length;
   const diffMatch = progress.match(/代码变更 \(共 (\d+) 个文件\)/);
   const gitDiffCount = input.gitDiffCount ?? (diffMatch ? Number.parseInt(diffMatch[1], 10) : 0);
 
@@ -454,23 +464,12 @@ export function buildCardKitCardJson(input: {
     header.text_tag_list = tags;
   }
 
-  const cardLink = input.workspace?.trim()
-    ? {
-        pc_url: `vscode://file${input.workspace.trim().startsWith("/") ? "" : "/"}${input.workspace.trim()}`,
-      }
-    : undefined;
-
-  const card: Record<string, unknown> = {
+  return {
     schema: "2.0",
     config,
     header,
     body: { elements },
   };
-  if (cardLink) {
-    card.card_link = cardLink;
-  }
-
-  return card;
 }
 
 export function parseStopTaskActionValue(value: unknown): { key: string; runId?: string } | undefined {

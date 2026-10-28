@@ -5,7 +5,9 @@
 import { spawnSync } from "node:child_process";
 import {
   buildCardKitCardJson,
+  parseOpenIdeActionValue,
   parseQuickPromptActionValue,
+  shortWorkspace,
 } from "./card-builder.ts";
 import {
   buildModelCard,
@@ -55,6 +57,34 @@ export function createCardActionHandler(
           i18n: {
             zh_cn: "MD 原文已过期，请重新生成卡片",
             en_us: "Markdown source expired",
+          },
+        },
+      };
+    }
+
+    const openIde = parseOpenIdeActionValue(action.value);
+    if (openIde) {
+      const ok = openWorkspaceInIde(openIde.workspace);
+      const displayWs = shortWorkspace(openIde.workspace);
+      if (ok) {
+        return {
+          toast: {
+            type: "success",
+            content: `已在 VS Code 中打开: ${displayWs}`,
+            i18n: {
+              zh_cn: `已在 VS Code 中打开: ${displayWs}`,
+              en_us: `Opened in VS Code: ${displayWs}`,
+            },
+          },
+        };
+      }
+      return {
+        toast: {
+          type: "warning",
+          content: `唤起 VS Code 失败: ${displayWs}`,
+          i18n: {
+            zh_cn: `唤起 VS Code 失败: ${displayWs}`,
+            en_us: `Failed to open VS Code: ${displayWs}`,
           },
         },
       };
@@ -213,5 +243,29 @@ export function copyToSystemClipboard(text: string): boolean {
       if (res.status === 0) return true;
     } catch {}
   }
+  return false;
+}
+
+export function openWorkspaceInIde(workspace: string): boolean {
+  if (!workspace || !workspace.trim()) return false;
+  const target = workspace.trim();
+  if (process.platform === "darwin") {
+    try {
+      const res = spawnSync("open", ["-b", "com.microsoft.VSCode", target]);
+      if (res.status === 0) return true;
+    } catch {}
+    try {
+      const res = spawnSync("open", ["-a", "Visual Studio Code", target]);
+      if (res.status === 0) return true;
+    } catch {}
+    try {
+      const res = spawnSync("open", [`vscode://file${target.startsWith("/") ? "" : "/"}${target}`]);
+      if (res.status === 0) return true;
+    } catch {}
+  }
+  try {
+    const res = spawnSync("code", [target]);
+    return res.status === 0;
+  } catch {}
   return false;
 }
